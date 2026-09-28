@@ -245,4 +245,14 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
       CREATE UNIQUE INDEX idx_aprobaciones_pendiente ON aprobaciones(tarea_id) WHERE estado = 'pendiente';
     `,
   },
+  {
+    version: 6,
+    nombre: 'proyectos_ventanas',
+    sql: `
+      -- Personalización por proyecto: fijado en el menú, color de su ventana y nombre de ventana.
+      ALTER TABLE proyectos ADD COLUMN fijado INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE proyectos ADD COLUMN color TEXT NOT NULL DEFAULT 'marino';
+      ALTER TABLE proyectos ADD COLUMN nombre_ventana TEXT;
+    `,
+  },
 ];

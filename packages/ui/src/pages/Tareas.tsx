@@ -3,6 +3,7 @@ import { FasesEquipo, PlanCoordinador, RegistroDecisiones } from '../components/
 import { PanelRevision } from '../components/Revision';
 import { VisorDiff } from '../components/VisorDiff';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { BarraAvance } from '../components/BarraAvance';
 import { Alerta, BotonCarga, Encabezado, fecha, Vacio } from '../components/Comunes';
 import { ContinuarProyecto } from '../components/ContinuarProyecto';
 import { IconoPlay, IconoTareas } from '../components/Iconos';
@@ -74,7 +75,7 @@ export function Tareas({ abierta, alAbrir }: { abierta: string | null; alAbrir(i
       {datos && datos.length > 0 && (
         <section className="tarjeta" style={{ padding: 0 }}>
           <div className="tabla-contenedor">
-            <table className="tabla tabla-clic">
+            <table className="tabla tabla-clic tabla-tarjetas">
               <thead>
                 <tr>
                   <th>Objetivo</th>
@@ -87,16 +88,22 @@ export function Tareas({ abierta, alAbrir }: { abierta: string | null; alAbrir(i
               <tbody>
                 {datos.map((t) => (
                   <tr key={t.id} onClick={() => alAbrir(t.id)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && alAbrir(t.id)}>
-                    <td className="celda-objetivo">
+                    <td className="celda-objetivo" data-etiqueta="Objetivo">
                       {t.modo === 'colaborativo' && <span className="etiqueta etiqueta-marino" style={{ marginRight: 6 }}>Equipo</span>}
                       {t.objetivo}
                     </td>
-                    <td>{t.proyectoNombre}</td>
-                    <td>{t.agenteNombre}</td>
-                    <td>
+                    <td data-etiqueta="Proyecto">{t.proyectoNombre}</td>
+                    <td data-etiqueta="Agente">{t.agenteNombre}</td>
+                    <td data-etiqueta="Estado">
                       <EtiquetaEstado estado={t.estado} />
+                      {t.estado !== 'completada' && t.avance.porcentaje > 0 && (
+                        <span className="porcentaje-fila" title={t.avance.etapa}>
+                          {t.avance.estimado ? '≈' : ''}
+                          {t.avance.porcentaje} %
+                        </span>
+                      )}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fecha(t.creadaEn)}</td>
+                    <td data-etiqueta="Creada" style={{ whiteSpace: 'nowrap' }}>{fecha(t.creadaEn)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -205,6 +212,9 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
             {equipo ? `Equipo: ${tarea.agenteNombre} (coordinador), ${equipo.participantes.map((p) => p.nombre).join(', ')}` : tarea.agenteNombre} · rama{' '}
             <span className="mono">{tarea.rama}</span>
           </p>
+          <div className="avance-tarea">
+            <BarraAvance avance={tarea.avance} activa={tarea.estado === 'ejecutando'} grande />
+          </div>
         </div>
         <div className="acciones">
           {activa && (

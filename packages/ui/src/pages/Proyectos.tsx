@@ -1,6 +1,7 @@
 import {
   NOMBRE_ROL,
   type AgentePublico,
+  type ColorProyecto,
   type EstadoRepositorio,
   type LimitesProyecto,
   type ProyectoPublico,
@@ -8,13 +9,36 @@ import {
 } from '@softgala/shared';
 import { useCallback, useState, type FormEvent } from 'react';
 import { Alerta, BotonCarga, Campo, Encabezado, fecha, Interruptor, Modal, Vacio } from '../components/Comunes';
+import { BarraAvance } from '../components/BarraAvance';
 import { IconoProyecto } from '../components/Iconos';
+import { hexDe, SelectorColor } from '../components/SelectorColor';
+import { ventanasEscritorio } from '../lib/plataforma';
+import { avisarCambioProyectos } from '../lib/ventanas';
+import { IconoPin } from './VentanaProyecto';
 import { mensajeError, useDatos } from '../lib/datos';
 import { useSesion } from '../lib/sesion';
 
-export function Proyectos() {
+export function Proyectos({ alAbrirProyecto }: { alAbrirProyecto(p: ProyectoPublico): void }) {
   const { api } = useSesion();
-  const { datos, error, recargar } = useDatos(useCallback(() => api.proyectos(), [api]));
+  const { datos, error, recargar, setDatos } = useDatos(useCallback(() => api.proyectos(), [api]));
+  const [errorFijar, setErrorFijar] = useState<string | null>(null);
+  const hayVentanas = !!ventanasEscritorio();
+
+  async function alternarFijado(p: ProyectoPublico) {
+    setErrorFijar(null);
+    try {
+      const nuevo = await api.editarProyecto(p.id, { fijado: !p.fijado });
+      // Los fijados van primero, como los ordena el servidor.
+      setDatos(
+        (datos ?? [])
+          .map((x) => (x.id === nuevo.id ? nuevo : x))
+          .sort((a, b) => Number(b.fijado) - Number(a.fijado) || a.nombre.localeCompare(b.nombre)),
+      );
+      avisarCambioProyectos();
+    } catch (err) {
+      setErrorFijar(mensajeError(err));
+    }
+  }
   const [conectando, setConectando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
 
@@ -37,9 +61,9 @@ export function Proyectos() {
           Conectar proyecto
         </button>
       </Encabezado>
-      {error && (
+      {(error || errorFijar) && (
         <div style={{ marginBottom: 16 }}>
-          <Alerta>{error}</Alerta>
+          <Alerta>{error ?? errorFijar}</Alerta>
         </div>
       )}
 
@@ -58,14 +82,28 @@ export function Proyectos() {
 
       <div className="lista-tarjetas">
         {datos?.map((p) => (
-          <button key={p.id} className="tarjeta tarjeta-recurso tarjeta-clic" onClick={() => setSeleccionado(p.id)}>
+          <article key={p.id} className="tarjeta tarjeta-recurso tarjeta-proyecto" style={{ ['--color-proyecto' as string]: hexDe(p.color) }}>
             <div className="cabecera">
-              <div>
-                <h3>{p.nombre}</h3>
+              <button className="tarjeta-titulo" onClick={() => setSeleccionado(p.id)} title="Ver configuración del proyecto">
+                <h3>{p.nombreVentana ?? p.nombre}</h3>
                 <div className="sub mono">{p.repositorio}</div>
-              </div>
+              </button>
               <span className="etiqueta">{p.privado ? 'Privado' : 'Público'}</span>
+              <button
+                className="boton-fijar"
+                onClick={() => void alternarFijado(p)}
+                aria-pressed={p.fijado}
+                aria-label={p.fijado ? `Quitar ${p.nombre} de fijados` : `Fijar ${p.nombre} en el menú`}
+                title={p.fijado ? 'Quitar de fijados' : 'Fijar en el menú'}
+              >
+                <IconoPin />
+              </button>
             </div>
+            {p.avance ? (
+              <BarraAvance avance={p.avance} color={hexDe(p.color)} activa={p.avance.estado === 'ejecutando'} />
+            ) : (
+              <div className="sub">Sin tareas todavía</div>
+            )}
             <dl className="datos-lista">
               <dt>Rama base</dt>
               <dd className="mono">{p.ramaBase}</dd>
@@ -75,7 +113,15 @@ export function Proyectos() {
               <dd>{p.validaciones.length || '—'}</dd>
             </dl>
             {p.avisos.length > 0 && <span className="etiqueta etiqueta-aviso">{p.avisos.length} aviso(s) de seguridad</span>}
-          </button>
+            <div className="acciones">
+              <button className="boton boton-chico" onClick={() => alAbrirProyecto(p)}>
+                {hayVentanas ? 'Abrir en ventana' : 'Ver progreso'}
+              </button>
+              <button className="boton boton-chico boton-texto" onClick={() => setSeleccionado(p.id)}>
+                Configurar
+              </button>
+            </div>
+          </article>
         ))}
       </div>
 
@@ -237,6 +283,14 @@ function DetalleProyecto({ id, alVolver }: { id: string; alVolver(): void }) {
           alCambiar={(agenteId, v) => void accion(() => api.habilitarAgente(p.id, agenteId, v))}
         />
         <Validaciones inicial={p.validaciones} alGuardar={(validaciones) => accion(() => api.editarProyecto(p.id, { validaciones }))} />
+        <Personalizacion
+          proyecto={p}
+          alGuardar={async (cambios) => {
+            const ok = await accion(() => api.editarProyecto(p.id, cambios));
+            if (ok) avisarCambioProyectos();
+            return ok;
+          }}
+        />
         <Configuracion proyecto={p} alGuardar={(cambios) => accion(() => api.editarProyecto(p.id, cambios))} />
       </div>
     </>
@@ -441,6 +495,60 @@ function Configuracion({
           </BotonCarga>
         </div>
       </form>
+    </section>
+  );
+}
+
+/** Nombre de la ventana, color y fijado en el menú: solo cambian cómo se ve el proyecto en la app. */
+function Personalizacion({
+  proyecto,
+  alGuardar,
+}: {
+  proyecto: ProyectoPublico;
+  alGuardar(c: { nombreVentana?: string | null; color?: ColorProyecto; fijado?: boolean }): Promise<boolean>;
+}) {
+  const [nombre, setNombre] = useState(proyecto.nombreVentana ?? '');
+  const [guardando, setGuardando] = useState(false);
+  const cambiado = (nombre.trim() || null) !== proyecto.nombreVentana;
+
+  async function guardarNombre(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    await alGuardar({ nombreVentana: nombre.trim() || null });
+    setGuardando(false);
+  }
+
+  return (
+    <section className="tarjeta" style={{ ['--color-proyecto' as string]: hexDe(proyecto.color) }}>
+      <h2>Ventana y apariencia</h2>
+      <form onSubmit={guardarNombre} style={{ display: 'grid', gap: 12 }}>
+        <Campo etiqueta="Nombre de la ventana" htmlFor="p-nombre-ventana" ayuda={`Vacío = «${proyecto.nombre}». Se usa en la ventana, las tarjetas y los fijados.`}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              id="p-nombre-ventana"
+              className="entrada"
+              maxLength={60}
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder={proyecto.nombre}
+            />
+            <BotonCarga type="submit" className="boton" cargando={guardando} disabled={!cambiado}>
+              Guardar
+            </BotonCarga>
+          </div>
+        </Campo>
+      </form>
+      <div className="campo" style={{ marginTop: 14 }}>
+        <label>Color de la ventana</label>
+        <SelectorColor valor={proyecto.color} alCambiar={(color) => void alGuardar({ color })} />
+      </div>
+      <div className="fila-interruptor">
+        <div>
+          <strong>Fijar en el menú lateral</strong>
+          <span className="ayuda">Acceso directo con su avance en la sección «Fijados».</span>
+        </div>
+        <Interruptor etiqueta="Fijar en el menú lateral" activo={proyecto.fijado} alCambiar={(fijado) => void alGuardar({ fijado })} />
+      </div>
     </section>
   );
 }

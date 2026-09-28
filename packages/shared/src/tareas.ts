@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AvanceTarea } from './recursos';
 import type { PublicacionTarea } from './revision';
 
 export const ESTADOS_TAREA = [
@@ -156,6 +157,7 @@ export interface TareaPublica {
   validaciones: ResultadoValidacion[];
   /** Estado de revisión y publicación (null mientras la tarea no ha terminado con cambios). */
   publicacion: PublicacionTarea | null;
+  avance: AvanceTarea;
   uso: UsoTarea;
   creadaEn: string;
   iniciadaEn: string | null;

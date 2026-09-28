@@ -1,6 +1,7 @@
 // Proceso principal de Electron (Windows).
-// La interfaz es la misma de packages/ui; aquí solo se crea la ventana y se expone
-// un almacén cifrado para el refresh token. El renderer no tiene acceso a Node.
+// La interfaz es la misma de packages/ui. Aquí se crean las ventanas (principal y una por proyecto),
+// se guarda la sesión cifrada con DPAPI y se renueva el token para TODAS las ventanas a la vez.
+// El renderer no tiene acceso a Node ni al refresh token.
 const { app, BrowserWindow, ipcMain, Menu, net, protocol, safeStorage, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,20 +12,29 @@ const DIR_UI = app.isPackaged
   ? path.join(process.resourcesPath, 'ui')
   : path.resolve(__dirname, '../../packages/ui/dist');
 const ORIGEN_APP = 'app://ui';
+const URL_INICIO = URL_DESARROLLO ?? `${ORIGEN_APP}/index.html`;
+const COLOR_BARRA = '#071426';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
+// En la app instalada no se permite depuración remota: otro programa del equipo podría controlarla.
+if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe', 'inspect', 'inspect-brk'].some((s) => app.commandLine.hasSwitch(s))) {
+  app.exit(1);
+}
+
 // Las capturas de verificación usan un perfil aparte para no tocar la sesión real.
-if (process.env.CAPTURA && !app.isPackaged) {
+const CAPTURA = process.env.CAPTURA && !app.isPackaged ? process.env.CAPTURA : null;
+if (CAPTURA) {
   app.setPath('userData', path.join(app.getPath('temp'), 'softgala-multiagente-captura'));
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
 // ---------- Almacén cifrado (DPAPI de Windows vía safeStorage) ----------
-const CLAVES_PERMITIDAS = new Set(['refreshToken', 'servidor']);
+// La interfaz solo puede leer/escribir "servidor". El refresh token lo maneja únicamente este proceso.
+const CLAVES_INTERFAZ = new Set(['servidor']);
 const archivoAlmacen = () => path.join(app.getPath('userData'), 'almacen.json');
 const enMemoria = new Map(); // respaldo si el cifrado del sistema no está disponible
 
@@ -40,16 +50,7 @@ function escribirAlmacen(datos) {
   fs.writeFileSync(archivoAlmacen(), JSON.stringify(datos), { mode: 0o600 });
 }
 
-/** Solo la propia interfaz puede usar el almacén. */
-function validarRemitente(evento, clave) {
-  const url = evento.senderFrame?.url ?? '';
-  const origenValido = url.startsWith(`${ORIGEN_APP}/`) || (URL_DESARROLLO && url.startsWith(URL_DESARROLLO));
-  if (!origenValido) throw new Error('Remitente no autorizado');
-  if (!CLAVES_PERMITIDAS.has(clave)) throw new Error('Clave no permitida');
-}
-
-ipcMain.handle('almacen:obtener', (evento, clave) => {
-  validarRemitente(evento, clave);
+function leerSecreto(clave) {
   if (!safeStorage.isEncryptionAvailable()) return enMemoria.get(clave) ?? null;
   const cifrado = leerAlmacen()[clave];
   if (!cifrado) return null;
@@ -58,11 +59,9 @@ ipcMain.handle('almacen:obtener', (evento, clave) => {
   } catch {
     return null;
   }
-});
+}
 
-ipcMain.handle('almacen:guardar', (evento, clave, valor) => {
-  validarRemitente(evento, clave);
-  if (typeof valor !== 'string' || valor.length > 4096) throw new Error('Valor no válido');
+function guardarSecreto(clave, valor) {
   if (!safeStorage.isEncryptionAvailable()) {
     // Sin cifrado del sistema no se escribe nada en disco: la sesión dura lo que la app abierta.
     enMemoria.set(clave, valor);
@@ -71,28 +70,127 @@ ipcMain.handle('almacen:guardar', (evento, clave, valor) => {
   const datos = leerAlmacen();
   datos[clave] = safeStorage.encryptString(valor).toString('base64');
   escribirAlmacen(datos);
-});
+}
 
-ipcMain.handle('almacen:borrar', (evento, clave) => {
-  validarRemitente(evento, clave);
+function borrarSecreto(clave) {
   enMemoria.delete(clave);
   const datos = leerAlmacen();
   delete datos[clave];
   escribirAlmacen(datos);
+}
+
+/** Solo la propia interfaz puede usar estos canales. */
+function validarRemitente(evento) {
+  const url = evento.senderFrame?.url ?? '';
+  const valido = url.startsWith(`${ORIGEN_APP}/`) || (URL_DESARROLLO && url.startsWith(URL_DESARROLLO));
+  if (!valido) throw new Error('Remitente no autorizado');
+}
+
+ipcMain.handle('almacen:obtener', (e, clave) => {
+  validarRemitente(e);
+  if (!CLAVES_INTERFAZ.has(clave)) throw new Error('Clave no permitida');
+  return leerSecreto(clave);
+});
+ipcMain.handle('almacen:guardar', (e, clave, valor) => {
+  validarRemitente(e);
+  if (!CLAVES_INTERFAZ.has(clave)) throw new Error('Clave no permitida');
+  if (typeof valor !== 'string' || valor.length > 4096) throw new Error('Valor no válido');
+  guardarSecreto(clave, valor);
+});
+ipcMain.handle('almacen:borrar', (e, clave) => {
+  validarRemitente(e);
+  if (!CLAVES_INTERFAZ.has(clave)) throw new Error('Clave no permitida');
+  borrarSecreto(clave);
 });
 
-// ---------- Ventana ----------
-function crearVentana() {
-  const captura = process.env.CAPTURA;
+// ---------- Sesión compartida entre ventanas ----------
+// Cada renovación rota el refresh token; si dos ventanas renovaran a la vez, el servidor lo tomaría
+// como un token robado y cerraría la sesión. Por eso se renueva aquí, una sola vez, para todas.
+let acceso = null; // { token, expira }
+let renovando = null;
+
+/** HTTPS obligatorio, salvo servidores de desarrollo en este equipo. */
+function validarServidor(url) {
+  const u = new URL(url);
+  const local = ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
+  if (u.protocol !== 'https:' && !(local && u.protocol === 'http:')) throw new Error('Servidor no permitido');
+  return u.origin;
+}
+
+function avisarATodas(canal) {
+  for (const v of BrowserWindow.getAllWindows()) if (!v.isDestroyed()) v.webContents.send(canal);
+}
+
+ipcMain.handle('sesion:establecer', (e, refreshToken, accessToken, expiraEnSeg) => {
+  validarRemitente(e);
+  if (typeof refreshToken !== 'string' || refreshToken.length > 400 || typeof accessToken !== 'string') throw new Error('Datos no válidos');
+  guardarSecreto('refreshToken', refreshToken);
+  acceso = { token: accessToken, expira: Date.now() + Number(expiraEnSeg) * 1000 };
+});
+
+ipcMain.handle('sesion:renovar', async (e, forzar, servidor) => {
+  validarRemitente(e);
+  if (!forzar && acceso && acceso.expira - Date.now() > 60_000) return { accessToken: acceso.token };
+  renovando ??= (async () => {
+    const refreshToken = leerSecreto('refreshToken');
+    if (!refreshToken) return null;
+    let r;
+    try {
+      r = await fetch(`${validarServidor(servidor)}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      throw new Error('SIN_CONEXION');
+    }
+    if (r.status === 401) {
+      borrarSecreto('refreshToken');
+      acceso = null;
+      avisarATodas('sesion:cerrada');
+      return null;
+    }
+    if (!r.ok) throw new Error('SIN_CONEXION');
+    const d = await r.json();
+    guardarSecreto('refreshToken', d.refreshToken);
+    acceso = { token: d.accessToken, expira: Date.now() + d.expiraEn * 1000 };
+    return { accessToken: d.accessToken };
+  })().finally(() => {
+    renovando = null;
+  });
+  return renovando;
+});
+
+ipcMain.handle('sesion:limpiar', (e) => {
+  validarRemitente(e);
+  acceso = null;
+  borrarSecreto('refreshToken');
+  avisarATodas('sesion:cerrada');
+});
+
+// ---------- Ventanas ----------
+const ventanasProyecto = new Map(); // proyectoId → BrowserWindow
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HEX = /^#[0-9a-f]{6}$/i;
+const limpiarTitulo = (t) => String(t ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 80) || 'Proyecto';
+
+/** Texto claro u oscuro según el color de fondo, para los botones de la barra de Windows. */
+function colorSimbolos(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#0b1f3a' : '#ffffff';
+}
+
+function crearVentana({ ruta = '', titulo = 'Plataforma Multiagente — SoftGala', color = COLOR_BARRA, ancho, alto, minAncho, minAlto } = {}) {
   const ventana = new BrowserWindow({
-    width: Number(process.env.CAPTURA_ANCHO) || 1280,
-    height: Number(process.env.CAPTURA_ALTO) || 800,
-    minWidth: captura ? 360 : 960,
-    minHeight: captura ? 600 : 640,
+    width: ancho,
+    height: alto,
+    minWidth: minAncho,
+    minHeight: minAlto,
     backgroundColor: '#f6f8fa',
-    title: 'Plataforma Multiagente — SoftGala',
+    title: titulo,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#071426', symbolColor: '#e3e8ef', height: 40 },
+    titleBarOverlay: { color, symbolColor: colorSimbolos(color), height: 40 },
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -113,30 +211,84 @@ function crearVentana() {
     const permitido = url.startsWith(`${ORIGEN_APP}/`) || (URL_DESARROLLO && url.startsWith(URL_DESARROLLO));
     if (!permitido) evento.preventDefault();
   });
-
+  // El título lo decide la app (nombre de ventana del proyecto), no el <title> de la página.
+  ventana.on('page-title-updated', (e) => e.preventDefault());
   ventana.once('ready-to-show', () => {
-    if (!captura) ventana.show();
+    if (!CAPTURA) ventana.show();
   });
 
-  if (captura && !app.isPackaged) {
-    // Modo de verificación (solo desarrollo): opcionalmente inicia sesión y navega,
-    // luego guarda una captura de la ventana y cierra.
-    ventana.webContents.once('did-finish-load', () => {
-      const { CAPTURA_EMAIL: email, CAPTURA_PASSWORD: password, CAPTURA_PAGINA: pagina, CAPTURA_CLIC: clic } = process.env;
-      if (email && password) {
-        setTimeout(() => void ventana.webContents.executeJavaScript(guionLogin(email, password, pagina, clic)), 800);
-      }
-      setTimeout(async () => {
-        const imagen = await ventana.webContents.capturePage();
-        fs.mkdirSync(path.dirname(captura), { recursive: true });
-        fs.writeFileSync(captura, imagen.toPNG());
-        app.quit();
-      }, Number(process.env.CAPTURA_ESPERA) || 2000);
-    });
-  }
-
-  void ventana.loadURL(URL_DESARROLLO ?? `${ORIGEN_APP}/index.html`);
+  void ventana.loadURL(`${URL_INICIO}${ruta}`);
   return ventana;
+}
+
+function crearVentanaPrincipal() {
+  const ventana = crearVentana({
+    ruta: CAPTURA && process.env.CAPTURA_RUTA ? process.env.CAPTURA_RUTA : '',
+    ancho: Number(process.env.CAPTURA_ANCHO) || 1280,
+    alto: Number(process.env.CAPTURA_ALTO) || 800,
+    minAncho: CAPTURA ? 360 : 960,
+    minAlto: CAPTURA ? 600 : 640,
+  });
+  if (CAPTURA) prepararCaptura(ventana, CAPTURA);
+  return ventana;
+}
+
+ipcMain.handle('ventana:abrir-proyecto', (e, proyectoId, titulo, color) => {
+  validarRemitente(e);
+  if (!UUID.test(String(proyectoId))) throw new Error('Proyecto no válido');
+  const colorValido = HEX.test(String(color)) ? color : COLOR_BARRA;
+  const existente = ventanasProyecto.get(proyectoId);
+  if (existente && !existente.isDestroyed()) {
+    if (existente.isMinimized()) existente.restore();
+    existente.focus();
+    return;
+  }
+  const ventana = crearVentana({
+    ruta: `#/proyecto/${proyectoId}`,
+    titulo: limpiarTitulo(titulo),
+    color: colorValido,
+    ancho: 900,
+    alto: 660,
+    minAncho: 420,
+    minAlto: 360,
+  });
+  ventanasProyecto.set(proyectoId, ventana);
+  ventana.on('closed', () => ventanasProyecto.delete(proyectoId));
+  if (CAPTURA) prepararCaptura(ventana, CAPTURA.replace(/\.png$/i, '-ventana.png'), false);
+});
+
+/** La ventana de un proyecto ajusta su propio título, color y "siempre encima". */
+ipcMain.handle('ventana:configurar', (e, opciones) => {
+  validarRemitente(e);
+  const ventana = BrowserWindow.fromWebContents(e.sender);
+  if (!ventana) return null;
+  if (opciones?.titulo !== undefined) ventana.setTitle(limpiarTitulo(opciones.titulo));
+  if (opciones?.color !== undefined && HEX.test(String(opciones.color))) {
+    ventana.setTitleBarOverlay({ color: opciones.color, symbolColor: colorSimbolos(opciones.color), height: 40 });
+  }
+  if (typeof opciones?.encima === 'boolean') ventana.setAlwaysOnTop(opciones.encima, 'floating');
+  return { encima: ventana.isAlwaysOnTop() };
+});
+
+// ---------- Modo de verificación (solo desarrollo) ----------
+/** Inicia sesión y navega si se pide, guarda una captura y (en la ventana principal) cierra la app. */
+function prepararCaptura(ventana, destino, principal = true) {
+  // Muestra en la terminal los errores de la página (útil para diagnosticar pantallas en blanco).
+  ventana.webContents.on('console-message', (e) => {
+    if (e.level === 'error' || e.level === 'warning') console.log(`[página:${e.level}] ${e.message}`);
+  });
+  ventana.webContents.once('did-finish-load', () => {
+    const { CAPTURA_EMAIL: email, CAPTURA_PASSWORD: password, CAPTURA_PAGINA: pagina, CAPTURA_CLIC: clic } = process.env;
+    if (principal) setTimeout(() => void ventana.webContents.executeJavaScript(guionLogin(email, password, pagina, clic)), 800);
+    const espera = principal ? Number(process.env.CAPTURA_ESPERA) || 2000 : Number(process.env.CAPTURA_ESPERA_VENTANA) || 3000;
+    setTimeout(async () => {
+      const imagen = await ventana.webContents.capturePage();
+      fs.mkdirSync(path.dirname(destino), { recursive: true });
+      fs.writeFileSync(destino, imagen.toPNG());
+      if (principal && !process.env.CAPTURA_ESPERA_VENTANA) app.quit();
+      if (!principal) app.quit();
+    }, espera);
+  });
 }
 
 /** Llena el formulario como lo haría una persona (React necesita el evento "input"). */
@@ -148,7 +300,7 @@ function guionLogin(email, password, pagina, clic) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     };
     // Si la sesión guardada ya se restauró, no hay formulario.
-    if (document.getElementById('email')) {
+    if (${JSON.stringify(Boolean(email && password))} && document.getElementById('email')) {
       escribir('email', ${JSON.stringify(email)});
       escribir('password', ${JSON.stringify(password)});
       await new Promise((r) => setTimeout(r, 150));
@@ -162,7 +314,9 @@ function guionLogin(email, password, pagina, clic) {
     // Varios clics separados por "|" (p. ej. abrir un diálogo y elegir una opción).
     for (const clic of ${JSON.stringify(clic ?? '')}.split('|').filter(Boolean)) {
       await new Promise((r) => setTimeout(r, ${Number(process.env.CAPTURA_PAUSA) || 1200}));
-      [...document.querySelectorAll('.contenido button, .contenido tr[tabindex]')].find((b) => b.textContent.includes(clic))?.click();
+      // Por nombre accesible (p. ej. el selector de tema) o por texto visible.
+      const objetivos = [...document.querySelectorAll('button, tr[tabindex]')];
+      (objetivos.find((b) => b.getAttribute('aria-label') === clic) ?? objetivos.find((b) => b.closest('.contenido') && b.textContent.includes(clic)))?.click();
     }
     const desplazar = ${Number(process.env.CAPTURA_DESPLAZAR) || 0};
     if (desplazar) {
@@ -185,14 +339,15 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permiso, responder) => responder(false));
 
   Menu.setApplicationMenu(null);
-  let ventana = crearVentana();
+  let principal = crearVentanaPrincipal();
 
   app.on('second-instance', () => {
-    if (ventana.isMinimized()) ventana.restore();
-    ventana.focus();
+    if (principal.isDestroyed()) principal = crearVentanaPrincipal();
+    if (principal.isMinimized()) principal.restore();
+    principal.focus();
   });
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) ventana = crearVentana();
+    if (BrowserWindow.getAllWindows().length === 0) principal = crearVentanaPrincipal();
   });
 });
 

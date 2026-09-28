@@ -27,6 +27,7 @@ import { leerJson, type Actor, type Contexto } from '../servicios/contexto';
 import type { ServicioProveedores } from '../servicios/proveedores';
 import type { ServicioProyectos } from '../servicios/proyectos';
 import type { BusEventos } from './bus';
+import { avanceDeTarea } from './avance';
 import { ejecutarCiclo, FinEjecucion } from './ciclo';
 import { Colaboracion, PREFIJO_PREGUNTA_SUBTAREA } from './colaboracion';
 import { ErrorGit, type EspaciosGit } from './git';
@@ -788,6 +789,7 @@ export class Orquestador {
       archivosModificados: leerJson<string[]>(f.archivos, []),
       validaciones: leerJson<ResultadoValidacion[]>(f.validaciones, []),
       publicacion: leerJson<PublicacionTarea | null>(f.publicacion, null),
+      avance: avanceDeTarea(this.ctx.db, f),
       uso: { tokensEntrada: f.tokens_entrada, tokensSalida: f.tokens_salida, costoUsd: f.costo_usd },
       creadaEn: f.creada_en,
       iniciadaEn: f.iniciada_en,

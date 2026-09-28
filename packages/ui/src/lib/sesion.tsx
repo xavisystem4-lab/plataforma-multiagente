@@ -23,6 +23,8 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     api.alExpirar = () => setEstado({ fase: 'anonimo', aviso: 'Tu sesión terminó. Inicia sesión de nuevo.' });
+    // Si otra ventana cierra la sesión, esta también vuelve al inicio de sesión.
+    const dejarDeOir = api.alCerrarEnOtraVentana(() => setEstado({ fase: 'anonimo' }));
     (async () => {
       await api.cargarServidor();
       try {
@@ -32,6 +34,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
         setEstado({ fase: 'anonimo', aviso: err instanceof ErrorCliente ? err.message : undefined });
       }
     })();
+    return dejarDeOir;
   }, [api]);
 
   const iniciar = useCallback(

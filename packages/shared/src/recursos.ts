@@ -171,7 +171,27 @@ export const esquemaProyectoNuevo = z.object({
 });
 export type ProyectoNuevo = z.input<typeof esquemaProyectoNuevo>;
 
+/** Colores para pintar la ventana y la tarjeta de cada proyecto. */
+export const COLORES_PROYECTO = {
+  marino: { nombre: 'Azul marino', hex: '#13294B' },
+  azul: { nombre: 'Azul', hex: '#1F5FBF' },
+  turquesa: { nombre: 'Turquesa', hex: '#0E7C86' },
+  verde: { nombre: 'Verde', hex: '#1F7A4D' },
+  ambar: { nombre: 'Ámbar', hex: '#B7791F' },
+  naranja: { nombre: 'Naranja', hex: '#C2410C' },
+  rojo: { nombre: 'Rojo', hex: '#B42318' },
+  violeta: { nombre: 'Violeta', hex: '#6D3FC0' },
+  rosa: { nombre: 'Rosa', hex: '#BE185D' },
+  grafito: { nombre: 'Grafito', hex: '#3D4A5C' },
+} as const;
+export type ColorProyecto = keyof typeof COLORES_PROYECTO;
+const IDS_COLORES = Object.keys(COLORES_PROYECTO) as [ColorProyecto, ...ColorProyecto[]];
+
 export const esquemaProyectoEdicion = z.object({
+  fijado: z.boolean().optional(),
+  color: z.enum(IDS_COLORES).optional(),
+  /** Nombre que muestra la ventana del proyecto; null vuelve al nombre del proyecto. */
+  nombreVentana: z.string().trim().min(1).max(60).nullable().optional(),
   nombre: nombre.optional(),
   ramaBase: z.string().trim().min(1).max(250).optional(),
   token: tokenGitHub.optional(),
@@ -194,7 +214,27 @@ export interface ProyectoPublico {
   agentes: { agenteId: string; nombre: string; rol: RolAgente; activo: boolean }[];
   /** Advertencias al conectar (p. ej. token con más permisos de los necesarios). */
   avisos: string[];
+  fijado: boolean;
+  color: ColorProyecto;
+  nombreVentana: string | null;
+  /** Avance de la tarea más reciente del proyecto (null si aún no tiene tareas). */
+  avance: AvanceProyecto | null;
   creadoEn: string;
+}
+
+/** Avance de una tarea. En modo individual es una estimación por pasos (`estimado: true`). */
+export interface AvanceTarea {
+  porcentaje: number;
+  etapa: string;
+  estimado: boolean;
+}
+
+export interface AvanceProyecto extends AvanceTarea {
+  tareaId: string;
+  objetivo: string;
+  estado: string;
+  tareasTotales: number;
+  tareasCompletadas: number;
 }
 
 export interface EstadoRepositorio {

@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import {
   esquemaProyectoNuevo,
+  type AvanceProyecto,
+  type ColorProyecto,
+  type EstadoTarea,
+  type FaseColaboracion,
+  type ModoTarea,
   type EstadoRepositorio,
   type LimitesProyecto,
   type ProyectoEdicion,
@@ -10,6 +15,7 @@ import {
   type Validacion,
 } from '@softgala/shared';
 import { auditar } from '../auditoria';
+import { avanceDeTarea } from '../ejecucion/avance';
 import { transaccion } from '../db';
 import { ErrorApp, noEncontrado } from '../errores';
 import { avisosToken } from '../externo/github';
@@ -18,6 +24,9 @@ import type { ServicioAgentes } from './agentes';
 
 interface FilaProyecto {
   id: string;
+  fijado: number;
+  color: ColorProyecto;
+  nombre_ventana: string | null;
   nombre: string;
   repositorio: string;
   rama_base: string;
@@ -43,7 +52,7 @@ export class ServicioProyectos {
 
   listar(actor: Actor): ProyectoPublico[] {
     const filas = this.ctx.db
-      .prepare('SELECT * FROM proyectos WHERE usuario_id = ? ORDER BY nombre')
+      .prepare('SELECT * FROM proyectos WHERE usuario_id = ? ORDER BY fijado DESC, nombre')
       .all(actor.id) as unknown as FilaProyecto[];
     return filas.map((f) => this.aPublico(f));
   }
@@ -121,7 +130,7 @@ export class ServicioProyectos {
     this.ctx.db
       .prepare(
         `UPDATE proyectos SET nombre = ?, rama_base = ?, privado = ?, token_cifrado = ?, token_final = ?,
-           validaciones = ?, limites = ?, avisos = ?, actualizado_en = ? WHERE id = ?`,
+           validaciones = ?, limites = ?, avisos = ?, fijado = ?, color = ?, nombre_ventana = ?, actualizado_en = ? WHERE id = ?`,
       )
       .run(
         cambios.nombre ?? actual.nombre,
@@ -132,11 +141,14 @@ export class ServicioProyectos {
         cambios.validaciones ? JSON.stringify(cambios.validaciones) : actual.validaciones,
         cambios.limites ? JSON.stringify(cambios.limites) : actual.limites,
         JSON.stringify(avisos),
+        cambios.fijado === undefined ? actual.fijado : cambios.fijado ? 1 : 0,
+        cambios.color ?? actual.color,
+        cambios.nombreVentana === undefined ? actual.nombre_ventana : cambios.nombreVentana,
         ahoraIso(this.ctx),
         id,
       );
     auditar(this.ctx.db, {
-      accion: cambios.token ? 'proyecto.token_rotado' : 'proyecto.actualizado',
+      accion: cambios.token ? 'proyecto.token_rotado' : Object.keys(cambios).every((c) => ['fijado', 'color', 'nombreVentana'].includes(c)) ? 'proyecto.personalizado' : 'proyecto.actualizado',
       usuarioId: actor.id,
       proyectoId: id,
       detalle: { campos: Object.keys(cambios).filter((c) => c !== 'token'), tokenCambiado: !!cambios.token },
@@ -235,7 +247,23 @@ export class ServicioProyectos {
       limites: leerJson<LimitesProyecto>(f.limites, { maxAgentesSimultaneos: 1, presupuestoMensualUsd: 0 }),
       agentes: agentes.map((a) => ({ agenteId: a.id, nombre: a.nombre, rol: a.rol, activo: a.activo === 1 })),
       avisos: leerJson<string[]>(f.avisos, []),
+      fijado: f.fijado === 1,
+      color: f.color,
+      nombreVentana: f.nombre_ventana,
+      avance: this.avance(f.id),
       creadoEn: f.creado_en,
     };
+  }
+
+  /** Avance de la tarea más reciente del proyecto y el conteo de tareas. */
+  private avance(proyectoId: string): AvanceProyecto | null {
+    const t = this.ctx.db
+      .prepare('SELECT id, objetivo, estado, modo, fase FROM tareas WHERE proyecto_id = ? ORDER BY creada_en DESC LIMIT 1')
+      .get(proyectoId) as { id: string; objetivo: string; estado: EstadoTarea; modo: ModoTarea; fase: FaseColaboracion | null } | undefined;
+    if (!t) return null;
+    const c = this.ctx.db
+      .prepare("SELECT COUNT(*) AS total, COALESCE(SUM(estado = 'completada'), 0) AS completadas FROM tareas WHERE proyecto_id = ?")
+      .get(proyectoId) as { total: number; completadas: number };
+    return { ...avanceDeTarea(this.ctx.db, t), tareaId: t.id, objetivo: t.objetivo, estado: t.estado, tareasTotales: c.total, tareasCompletadas: c.completadas };
   }
 }

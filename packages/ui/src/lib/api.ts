@@ -27,11 +27,12 @@ import type {
 } from '@softgala/shared';
 import type { esquemaContinuar } from '@softgala/shared';
 import type { z } from 'zod';
-import { nombreDispositivo, type Almacen } from './plataforma';
+import { detectarPlataforma, nombreDispositivo, type Almacen, type IntermediarioSesion } from './plataforma';
 
 const enc = encodeURIComponent;
 
-export const SERVIDOR_PREDETERMINADO = 'http://127.0.0.1:4000';
+/** En el emulador de Android, 10.0.2.2 es la computadora anfitriona (servidor de desarrollo). */
+export const SERVIDOR_PREDETERMINADO = detectarPlataforma() === 'android' ? 'http://10.0.2.2:4000' : 'http://127.0.0.1:4000';
 const CLAVE_REFRESH = 'refreshToken';
 const CLAVE_SERVIDOR = 'servidor';
 
@@ -56,9 +57,9 @@ export function validarServidor(url: string): string {
   } catch {
     throw new ErrorCliente('SERVIDOR_INVALIDO', 'Escribe una dirección válida, p. ej. https://mi-servidor.com');
   }
-  const local = ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname);
+  const local = ['127.0.0.1', 'localhost', '[::1]', '10.0.2.2'].includes(u.hostname);
   if (u.protocol !== 'https:' && !(local && u.protocol === 'http:')) {
-    throw new ErrorCliente('SERVIDOR_INSEGURO', 'El servidor debe usar HTTPS (solo se permite HTTP en este equipo).');
+    throw new ErrorCliente('SERVIDOR_INSEGURO', 'El servidor debe usar HTTPS (HTTP solo para un servidor de desarrollo en este equipo o el emulador).');
   }
   return u.origin;
 }
@@ -70,7 +71,15 @@ export class ClienteApi {
   /** Se invoca cuando la sesión ya no puede renovarse (revocada o expirada). */
   alExpirar: () => void = () => {};
 
+  /** En Windows, el proceso principal renueva la sesión para todas las ventanas. */
+  private readonly intermediario: IntermediarioSesion | null = window.softgala?.sesion ?? null;
+
   constructor(private readonly almacen: Almacen) {}
+
+  /** Avisa cuando otra ventana cerró la sesión (solo escritorio). */
+  alCerrarEnOtraVentana(fn: () => void): () => void {
+    return this.intermediario?.alCerrar(fn) ?? (() => {});
+  }
 
   async cargarServidor(): Promise<string> {
     this.servidor = (await this.almacen.obtener(CLAVE_SERVIDOR)) ?? SERVIDOR_PREDETERMINADO;
@@ -94,7 +103,7 @@ export class ClienteApi {
 
   /** Intenta reanudar la sesión guardada al abrir la app. */
   async restaurar(): Promise<UsuarioPublico | null> {
-    if (!(await this.almacen.obtener(CLAVE_REFRESH))) return null;
+    if (!this.intermediario && !(await this.almacen.obtener(CLAVE_REFRESH))) return null;
     if (!(await this.refrescar())) return null;
     return this.solicitud<UsuarioPublico>('GET', '/api/auth/me');
   }
@@ -106,7 +115,8 @@ export class ClienteApi {
       /* aunque falle la red, se borra la sesión local */
     } finally {
       this.accessToken = null;
-      await this.almacen.borrar(CLAVE_REFRESH);
+      if (this.intermediario) await this.intermediario.limpiar();
+      else await this.almacen.borrar(CLAVE_REFRESH);
     }
   }
 
@@ -175,7 +185,7 @@ export class ClienteApi {
   /** Fuerza una renovación (p. ej. si el WebSocket rechazó un token vencido). */
   async renovarAcceso(): Promise<boolean> {
     this.accessToken = null;
-    return this.refrescar();
+    return this.refrescar(true);
   }
 
   urlTiempoReal(): string {
@@ -197,14 +207,26 @@ export class ClienteApi {
       return await this.enviar<T>(metodo, ruta, cuerpo, this.accessToken!);
     } catch (err) {
       if (!(err instanceof ErrorCliente) || err.estado !== 401) throw err;
-      if (!(await this.refrescar())) throw this.sesionExpirada();
+      // Tras un 401 se fuerza la renovación: el token en caché pudo haber sido revocado.
+      if (!(await this.refrescar(true))) throw this.sesionExpirada();
       return this.enviar<T>(metodo, ruta, cuerpo, this.accessToken!);
     }
   }
 
   /** Una sola renovación a la vez: dos renovaciones simultáneas harían que el servidor revoque la sesión. */
-  private refrescar(): Promise<boolean> {
+  private refrescar(forzar = false): Promise<boolean> {
     this.refrescoEnCurso ??= (async () => {
+      if (this.intermediario) {
+        try {
+          const r = await this.intermediario.renovar(forzar, this.servidor);
+          this.accessToken = r?.accessToken ?? null;
+          return !!r;
+        } catch {
+          throw new ErrorCliente('SIN_CONEXION', `No se pudo conectar con el servidor (${this.servidor}).`);
+        } finally {
+          this.refrescoEnCurso = null;
+        }
+      }
       try {
         const token = await this.almacen.obtener(CLAVE_REFRESH);
         if (!token) return false;
@@ -225,7 +247,8 @@ export class ClienteApi {
 
   private async guardarTokens(r: RespuestaLogin): Promise<void> {
     this.accessToken = r.accessToken;
-    await this.almacen.guardar(CLAVE_REFRESH, r.refreshToken);
+    if (this.intermediario) await this.intermediario.establecer(r.refreshToken, r.accessToken, r.expiraEn);
+    else await this.almacen.guardar(CLAVE_REFRESH, r.refreshToken);
   }
 
   private sesionExpirada(): ErrorCliente {

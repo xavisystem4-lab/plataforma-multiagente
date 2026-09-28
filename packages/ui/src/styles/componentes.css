@@ -32,7 +32,7 @@
 .modal header h2 {
   font-size: 18px;
   font-weight: 600;
-  color: var(--marino-900);
+  color: var(--titulo);
 }
 .modal header p {
   margin: 4px 0 0;
@@ -132,7 +132,7 @@ select.entrada {
 }
 .opcion input {
   margin-top: 3px;
-  accent-color: var(--marino-700);
+  accent-color: var(--enlace);
 }
 .opcion strong {
   display: flex;
@@ -171,7 +171,7 @@ select.entrada {
 }
 .interruptor[aria-checked='true'] {
   background: var(--marino-700);
-  border-color: var(--marino-700);
+  border-color: var(--enlace);
 }
 .interruptor[aria-checked='true']::after {
   transform: translateX(18px);
@@ -202,7 +202,7 @@ select.entrada {
 .tarjeta-recurso h3 {
   font-size: 15px;
   font-weight: 600;
-  color: var(--marino-900);
+  color: var(--titulo);
 }
 .tarjeta-recurso .sub {
   font-size: 12.5px;
@@ -261,7 +261,7 @@ select.entrada {
   height: 52px;
   border-radius: 14px;
   background: var(--marino-50);
-  color: var(--marino-700);
+  color: var(--enlace);
   display: grid;
   place-items: center;
 }
@@ -270,7 +270,7 @@ select.entrada {
   height: 26px;
 }
 .vacio h2 {
-  color: var(--marino-900);
+  color: var(--titulo);
   font-size: 17px;
 }
 .vacio p {
@@ -328,7 +328,7 @@ select.entrada {
   white-space: nowrap;
 }
 .red-validacion input {
-  accent-color: var(--marino-700);
+  accent-color: var(--enlace);
 }
 .commit {
   border: 1px solid var(--borde);
@@ -339,7 +339,7 @@ select.entrada {
   font-size: 13px;
 }
 .commit a {
-  color: var(--marino-600);
+  color: var(--enlace);
 }
 .filtros {
   display: flex;

@@ -15,8 +15,8 @@ así que el trabajo continúa aunque cierres la laptop.
 | F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | ✅ Completada |
 | F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | ✅ Completada |
 | F4 | Diff, aprobación, reversión | ✅ Completada |
-| F5 | Instalador de Windows y APK de Android (Capacitor) | Siguiente |
-| F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
+| F5 | Instalador de Windows y APK de Android (Capacitor), modo claro/oscuro | ✅ Completada |
+| F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Siguiente |
 
 El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -25,7 +25,7 @@ El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 ```
 apps/server      API Fastify + TypeScript: auth, recursos, orquestador, sandbox, WebSocket
 apps/desktop     App de Windows (Electron): ventana, almacén cifrado con DPAPI
-apps/mobile      App Android (Capacitor) — fase F5
+apps/mobile      App Android (Capacitor): proyecto nativo, almacén seguro (Keystore), APK
 packages/ui      Interfaz React compartida por Windows y Android
 packages/shared  Tipos, esquemas zod y eventos compartidos
 infra/           Docker, Caddy — fase F6
@@ -37,7 +37,8 @@ infra/           Docker, Caddy — fase F6
 - Git en el servidor (lo usa el orquestador para clonar y crear ramas).
 - **Docker** en el servidor para ejecutar las validaciones de forma aislada. Sin Docker, los agentes igual
   leen y editan código, pero las validaciones se reportan como **no ejecutadas** (nunca como exitosas).
-- Para la APK (F5): JDK 17+ y Android SDK.
+- Para la APK: **JDK 21** (Capacitor 8) y el SDK de Android (viene con Android Studio). El script de
+  compilación busca un JDK 21 en `JAVA_HOME`, en `%USERPROFILE%\.softgala\herramientas\jdk-21` o en Android Studio.
 
 ## Primeros pasos (desarrollo local)
 
@@ -121,6 +122,57 @@ Nada se publica en GitHub sin tu aprobación:
 El token de GitHub necesita permiso de escritura (*Contents: Read and write*) y, para abrir PR,
 *Pull requests: Read and write*. Salvaguarda en el código: solo se pueden publicar o borrar ramas `agentes/*`
 y `revertir/*`, con refspec explícito y sin `--force`.
+
+## Instaladores (F5)
+
+```bash
+npm run dist:windows   # → apps/desktop/dist/PlataformaMultiagente-Setup-<versión>.exe
+npm run dist:android   # → apps/mobile/dist/PlataformaMultiagente-<versión>-debug.apk
+```
+
+**Windows**: instalador NSIS en español (elige carpeta, accesos directos). El instalador **no está firmado**
+con un certificado de firma de código, así que Windows SmartScreen mostrará una advertencia hasta que se firme.
+La app empaquetada tiene los fusibles de Electron endurecidos (sin `RunAsNode`, sin `NODE_OPTIONS`, sin
+argumentos de inspección, integridad del asar) y se cierra si se lanza con `--remote-debugging-port`.
+
+**Android**: la APK de depuración se instala activando "Instalar apps desconocidas". Para publicar, compila la
+versión release **con tu propio keystore** (nunca se guarda en el repositorio):
+
+```bash
+SOFTGALA_KEYSTORE=ruta/al/keystore.jks SOFTGALA_KEYSTORE_PASSWORD=… SOFTGALA_KEY_ALIAS=… SOFTGALA_KEY_PASSWORD=… \
+  npm run apk -w @softgala/mobile -- --release
+```
+
+Seguridad de la app Android: refresh token cifrado con AES-256-GCM y clave del **Android Keystore** (plugin
+nativo `AlmacenSeguro`), sin respaldos en la nube ni transferencia entre dispositivos, solo HTTPS
+(HTTP únicamente hacia el emulador `10.0.2.2` para desarrollo), `FLAG_SECURE` (sin capturas ni vista previa
+en Recientes) y sin depuración remota del WebView. En el teléfono, configura la dirección de tu servidor en
+"Cambiar" (debe ser HTTPS).
+
+## Apariencia: modo claro y oscuro
+
+Selector de tema desde el login, el menú lateral y Seguridad → Apariencia: **Claro**, **Oscuro** o
+**Automático** (sigue al sistema en vivo). Al cambiar, el nuevo tema se expande en círculo desde el botón
+(View Transitions); se respeta "reducir movimiento" del sistema.
+
+## Ventanas de proyecto, fijados y avance
+
+- **Fijar**: con el alfiler de la tarjeta (o en Proyectos → Configurar → *Ventana y apariencia*), el proyecto
+  aparece en la sección **Fijados** del menú lateral, con su color y su porcentaje de avance.
+- **Ventanas múltiples** (Windows): *Abrir en ventana* abre una ventana independiente por proyecto (se pueden
+  tener varias abiertas a la vez) con el progreso en vivo, la actividad reciente y la opción **Siempre encima**.
+  En Android se muestra como una vista dentro de la app (*Ver progreso*).
+- **Renombrar**: el lápiz de la barra de la ventana cambia su nombre (solo afecta a cómo se muestra; el
+  repositorio no cambia). Vacío = nombre del proyecto.
+- **Color**: 10 colores; pinta la barra de título de la ventana (también la nativa de Windows), la franja de la
+  tarjeta y la barra de avance.
+- **Barra de avance**: en modo equipo es real (fases y subtareas completadas); en modo individual es una
+  **estimación** (se marca con «≈»), porque el trabajo total de un agente no se conoce de antemano; llega a
+  100 % al completarse.
+
+Todas las ventanas comparten una sola sesión: el proceso principal de Electron renueva el token por ellas
+(el refresh token ya no es accesible desde la interfaz), así que abrir varias no dispara la detección de
+reutilización de tokens. Cerrar sesión en una ventana la cierra en todas.
 
 ## Pruebas
 
