@@ -83,6 +83,7 @@
 
 /* Formulario */
 .login-panel {
+  position: relative;
   background: var(--fondo);
   display: flex;
   align-items: center;
@@ -110,7 +111,7 @@
 .login-tarjeta header h2 {
   font-size: 22px;
   font-weight: 600;
-  color: var(--marino-900);
+  color: var(--titulo);
 }
 .login-tarjeta header p {
   margin: 4px 0 0;

@@ -2,6 +2,7 @@ import { MARCA } from '@softgala/shared';
 import { useState, type FormEvent } from 'react';
 import { IconoAlerta, IconoCheck, IconoOjo, IconoOjoTachado } from '../components/Iconos';
 import { Logo } from '../components/Logo';
+import { SelectorTema } from '../components/SelectorTema';
 import { ErrorCliente } from '../lib/api';
 import { useSesion } from '../lib/sesion';
 import '../styles/login.css';
@@ -66,10 +67,14 @@ export function Login({ aviso }: { aviso?: string }) {
             </li>
           </ul>
         </div>
-        <span className="login-version">Versión 0.1.0</span>
+        <span className="login-version">Versión {__VERSION_APP__}</span>
       </section>
 
       <section className="login-panel">
+        <div className="login-tema">
+          <span>Tema</span>
+          <SelectorTema />
+        </div>
         <div className="login-contenido">
           <div className="login-tarjeta">
             <header>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconoAlerta, IconoDispositivo, IconoMovil, IconoSalir } from '../components/Iconos';
 import { ErrorCliente } from '../lib/api';
 import { useSesion } from '../lib/sesion';
+import { SelectorTema } from '../components/SelectorTema';
 
 const formatoFecha = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -56,13 +57,21 @@ export function Seguridad() {
         </div>
       )}
 
+      <section className="tarjeta" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h2>Apariencia</h2>
+          <p>Claro, oscuro o automático según tu sistema.</p>
+        </div>
+        <SelectorTema />
+      </section>
+
       <section className="tarjeta">
         <h2>Sesiones activas</h2>
         {!sesiones ? (
           <p>Cargando…</p>
         ) : (
           <div className="tabla-contenedor">
-            <table className="tabla">
+            <table className="tabla tabla-tarjetas">
               <thead>
                 <tr>
                   <th>Dispositivo</th>
@@ -74,15 +83,15 @@ export function Seguridad() {
               <tbody>
                 {sesiones.map((s) => (
                   <tr key={s.id}>
-                    <td>
+                    <td data-etiqueta="Dispositivo">
                       <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         {s.dispositivo?.startsWith('Android') ? <IconoMovil /> : <IconoDispositivo />}
                         {s.dispositivo ?? 'Desconocido'}
                         {s.actual && <span className="etiqueta etiqueta-marino">Este dispositivo</span>}
                       </span>
                     </td>
-                    <td>{s.ip ?? '—'}</td>
-                    <td>{formatoFecha.format(new Date(s.ultimoUso))}</td>
+                    <td data-etiqueta="IP">{s.ip ?? '—'}</td>
+                    <td data-etiqueta="Último uso">{formatoFecha.format(new Date(s.ultimoUso))}</td>
                     <td style={{ textAlign: 'right' }}>
                       {!s.actual && (
                         <button

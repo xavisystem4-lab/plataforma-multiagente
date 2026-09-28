@@ -32,6 +32,13 @@
   --texto-suave: var(--gris-600);
   --borde: var(--gris-200);
   --acento: var(--marino-800);
+  /* Colores semánticos (cambian con el tema). */
+  --titulo: var(--marino-900);
+  --enlace: var(--marino-600);
+  --diff-mas-fondo: #e6f6ec;
+  --diff-mas-texto: #14532d;
+  --diff-menos-fondo: #fdecec;
+  --diff-menos-texto: #7f1d1d;
   --foco: 0 0 0 3px rgb(58 102 168 / 0.35);
 
   --radio-s: 6px;
@@ -159,7 +166,7 @@ a.boton {
 .boton-texto {
   border: none;
   background: none;
-  color: var(--marino-600);
+  color: var(--enlace);
   padding: 0;
   height: auto;
   font-weight: 600;
@@ -245,7 +252,7 @@ a.boton {
 }
 .alerta-info {
   background: var(--marino-50);
-  color: var(--marino-700);
+  color: var(--enlace);
   border-color: var(--marino-100);
 }
 
@@ -267,7 +274,7 @@ a.boton {
 }
 .etiqueta-marino {
   background: var(--marino-100);
-  color: var(--marino-700);
+  color: var(--enlace);
 }
 
 .girando {
