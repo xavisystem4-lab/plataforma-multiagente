@@ -1,0 +1,19 @@
+{
+  "appId": "com.softgala.multiagente",
+  "appName": "Plataforma Multiagente",
+  "webDir": "../../packages/ui/dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
+    }
+  }
+}

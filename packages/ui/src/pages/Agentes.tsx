@@ -106,7 +106,7 @@ export function Agentes({ irA }: { irA(p: Pagina): void }) {
       {datos && datos.agentes.length > 0 && (
         <section className="tarjeta" style={{ padding: 0 }}>
           <div className="tabla-contenedor">
-            <table className="tabla">
+            <table className="tabla tabla-tarjetas">
               <thead>
                 <tr>
                   <th>Agente</th>
@@ -120,19 +120,19 @@ export function Agentes({ irA }: { irA(p: Pagina): void }) {
               <tbody>
                 {datos.agentes.map((a) => (
                   <tr key={a.id}>
-                    <td>
+                    <td data-etiqueta="Agente">
                       <strong>{a.nombre}</strong>
                       <div className="sub" style={{ fontSize: 12, color: 'var(--texto-suave)' }}>
                         {NOMBRE_ROL[a.rol]}
                       </div>
                     </td>
-                    <td>
+                    <td data-etiqueta="Modelo">
                       <span className="mono">{a.modelo}</span>
                       <div style={{ fontSize: 12, color: 'var(--texto-suave)' }}>{a.proveedorNombre}</div>
                     </td>
-                    <td>{a.herramientas.length}</td>
-                    <td>{a.proyectos}</td>
-                    <td>
+                    <td data-etiqueta="Herramientas">{a.herramientas.length}</td>
+                    <td data-etiqueta="Proyectos">{a.proyectos}</td>
+                    <td data-etiqueta="Activo">
                       <Interruptor activo={a.activo} etiqueta={`Activar ${a.nombre}`} alCambiar={(v) => void cambiarActivo(a, v)} />
                     </td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>

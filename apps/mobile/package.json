@@ -1,0 +1,19 @@
+{
+  "name": "@softgala/mobile",
+  "productName": "Plataforma Multiagente",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Plataforma Multiagente para Android (Capacitor) — Desarrollado por SoftGala",
+  "scripts": {
+    "sync": "cap sync android",
+    "apk": "cap sync android && node scripts/compilar-apk.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.2"
+  }
+}

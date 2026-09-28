@@ -1,15 +1,69 @@
 {
   "name": "@softgala/desktop",
-  "version": "0.1.0",
+  "productName": "Plataforma Multiagente",
+  "version": "0.5.0",
   "private": true,
   "description": "Plataforma Multiagente para Windows — Desarrollado por SoftGala",
+  "author": "SoftGala",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron ."
+    "dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron .",
+    "dist": "electron-builder --win nsis --publish never"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "electron": "^44.4.5"
+    "electron": "44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.softgala.multiagente",
+    "productName": "Plataforma Multiagente",
+    "copyright": "Desarrollado por SoftGala",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../packages/ui/dist",
+        "to": "ui"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "PlataformaMultiagente-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Plataforma Multiagente",
+      "installerLanguages": [
+        "es_ES"
+      ],
+      "language": "3082",
+      "deleteAppDataOnUninstall": false
+    },
+    "electronVersion": "44.4.5",
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    }
   }
 }

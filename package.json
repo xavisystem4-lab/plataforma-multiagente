@@ -14,7 +14,9 @@
     "usuario:crear": "npm run usuario:crear -w @softgala/server --",
     "build": "npm run build -w @softgala/ui && npm run build -w @softgala/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "dist:windows": "npm run build -w @softgala/ui && npm run dist -w @softgala/desktop",
+    "dist:android": "npm run build -w @softgala/ui && npm run apk -w @softgala/mobile"
   },
   "engines": {
     "node": ">=22.13"

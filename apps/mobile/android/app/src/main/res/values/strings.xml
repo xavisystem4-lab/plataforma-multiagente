@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Plataforma Multiagente</string>
+    <string name="title_activity_main">Plataforma Multiagente</string>
+    <string name="package_name">com.softgala.multiagente</string>
+    <string name="custom_url_scheme">com.softgala.multiagente</string>
+</resources>

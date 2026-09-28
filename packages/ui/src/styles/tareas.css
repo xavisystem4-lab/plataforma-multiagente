@@ -190,7 +190,7 @@
   color: var(--texto-suave);
 }
 .selector-modo button.activo {
-  border-color: var(--marino-600);
+  border-color: var(--enlace);
   background: var(--marino-50);
   box-shadow: inset 0 0 0 1px var(--marino-600);
 }
@@ -228,8 +228,8 @@
 }
 .fase-equipo.actual {
   background: var(--marino-100);
-  color: var(--marino-800);
-  border-top-color: var(--marino-600);
+  color: var(--titulo);
+  border-top-color: var(--enlace);
 }
 
 .subtareas {
@@ -290,7 +290,7 @@
 }
 .evento-agent-proposal,
 .evento-agent-review {
-  border-left-color: var(--marino-600);
+  border-left-color: var(--enlace);
 }
 .evento-coordinator-decision {
   border-left-color: var(--exito);
@@ -310,7 +310,7 @@
   margin: 0 0 12px;
 }
 .revision a {
-  color: var(--marino-600);
+  color: var(--enlace);
   font-weight: 600;
 }
 .diff {
@@ -383,16 +383,16 @@
   white-space: pre;
 }
 .d-mas {
-  background: #e6f6ec;
-  color: #14532d;
+  background: var(--diff-mas-fondo);
+  color: var(--diff-mas-texto);
 }
 .d-menos {
-  background: #fdecec;
-  color: #7f1d1d;
+  background: var(--diff-menos-fondo);
+  color: var(--diff-menos-texto);
 }
 .d-bloque {
   background: var(--marino-50);
-  color: var(--marino-600);
+  color: var(--enlace);
 }
 .diff-nota {
   margin: 0;
