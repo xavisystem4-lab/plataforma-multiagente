@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { construirApp } from '../src/app';
+import { construirApp, type Dependencias } from '../src/app';
+import { SandboxNoDisponible } from '../src/ejecucion/sandbox';
 import { ServicioAuth } from '../src/auth/servicio';
 import { cargarConfig, type Config } from '../src/config';
 import { abrirDb, type Db } from '../src/db';
@@ -9,12 +12,19 @@ export const PASSWORD = 'contraseña-de-prueba-123';
 export const EMAIL = 'admin@prueba.local';
 export const EMAIL_2 = 'usuario@prueba.local';
 
+/** Carpetas temporales creadas por las pruebas; test/limpieza.ts las borra al final. */
+export const temporales = new Set<string>();
+
 export function configPrueba(extra: Record<string, string> = {}): Config {
+  const dirDatos = path.join(tmpdir(), `softgala-prueba-${randomBytes(6).toString('hex')}`);
+  temporales.add(dirDatos);
   return cargarConfig({
     NODE_ENV: 'test',
     JWT_SECRET: randomBytes(48).toString('base64url'),
     MASTER_KEY: randomBytes(32).toString('base64'),
     CORS_ORIGINS: 'app://ui',
+    // Cada contexto de prueba usa su propia carpeta de datos temporal.
+    DATA_DIR: dirDatos,
     ...extra,
   });
 }
@@ -29,6 +39,9 @@ export interface Contexto {
 export interface OpcionesContexto {
   fetchExterno?: typeof fetch;
   env?: Record<string, string>;
+  adaptadores?: Dependencias['adaptadores'];
+  sandbox?: Dependencias['sandbox'];
+  git?: Dependencias['git'];
 }
 
 /** App completa con base en memoria, reloj controlable, un admin y un usuario normal. */
@@ -45,6 +58,10 @@ export async function crearContexto(opciones: OpcionesContexto = {}): Promise<Co
     db,
     ahora,
     registrarLogs: false,
+    adaptadores: opciones.adaptadores,
+    // Sin Docker en pruebas salvo que la prueba lo simule.
+    sandbox: opciones.sandbox ?? new SandboxNoDisponible('Sandbox no disponible (pruebas).'),
+    git: opciones.git,
     // Por defecto, ninguna prueba puede salir a Internet.
     fetchExterno: opciones.fetchExterno ?? (async () => {
       throw new Error('Red deshabilitada en pruebas');
@@ -67,9 +84,10 @@ export interface LlamadaRegistrada {
   metodo: string;
   url: string;
   cabeceras: Record<string, string>;
+  cuerpo: unknown;
 }
 
-type Manejador = (url: URL) => Response | Promise<Response>;
+type Manejador = (url: URL, cuerpo: unknown) => Response | Promise<Response>;
 
 /**
  * Devuelve un `fetch` que responde según `rutas` (clave: "GET https://host/ruta" sin query)
@@ -84,9 +102,10 @@ export function fetchSimulado(rutas: Record<string, Manejador>) {
     new Headers(init?.headers ?? (entrada instanceof Request ? entrada.headers : undefined)).forEach((v, k) => {
       cabeceras[k] = v;
     });
-    llamadas.push({ metodo, url: url.toString(), cabeceras });
+    const texto = typeof init?.body === 'string' ? init.body : null;
+    llamadas.push({ metodo, url: url.toString(), cabeceras, cuerpo: texto ? JSON.parse(texto) : null });
     const manejador = rutas[`${metodo} ${url.origin}${url.pathname}`];
-    return manejador ? manejador(url) : new Response('ruta no simulada', { status: 599 });
+    return manejador ? manejador(url, llamadas.at(-1)!.cuerpo) : new Response('ruta no simulada', { status: 599 });
   }) as typeof fetch;
   return { fetch: fn, llamadas };
 }

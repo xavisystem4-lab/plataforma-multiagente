@@ -315,9 +315,20 @@ select.entrada {
 }
 .fila-validacion {
   display: grid;
-  grid-template-columns: 1fr 2fr auto;
+  grid-template-columns: 1fr 2fr auto auto;
   gap: 8px;
   align-items: center;
+}
+.red-validacion {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+.red-validacion input {
+  accent-color: var(--marino-700);
 }
 .commit {
   border: 1px solid var(--borde);

@@ -145,9 +145,27 @@ export class ServicioProyectos {
     return this.obtener(actor, id);
   }
 
+  /** Uso interno del orquestador: datos para ejecutar, con el token descifrado. */
+  paraEjecucion(usuarioId: string, id: string) {
+    const p = this.fila({ id: usuarioId, rol: 'usuario', ip: null }, id);
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      repositorio: p.repositorio,
+      ramaBase: p.rama_base,
+      token: this.token(p),
+      validaciones: leerJson<Validacion[]>(p.validaciones, []),
+      limites: leerJson<LimitesProyecto>(p.limites, { maxAgentesSimultaneos: 1, presupuestoMensualUsd: 0 }),
+    };
+  }
+
   /** Desconecta el proyecto de la plataforma. No modifica nada en GitHub. */
   eliminar(actor: Actor, id: string): void {
     const p = this.fila(actor, id);
+    const activa = this.ctx.db
+      .prepare("SELECT 1 FROM tareas WHERE proyecto_id = ? AND estado IN ('en_cola','ejecutando')")
+      .get(id);
+    if (activa) throw new ErrorApp(409, 'TAREA_EN_CURSO', 'Hay una tarea en ejecución; cancélala antes de desconectar el proyecto.');
     this.ctx.db.prepare('DELETE FROM proyectos WHERE id = ?').run(id);
     auditar(this.ctx.db, { accion: 'proyecto.desconectado', usuarioId: actor.id, proyectoId: id, detalle: { repositorio: p.repositorio }, ip: actor.ip });
   }

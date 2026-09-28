@@ -72,6 +72,8 @@ export class ServicioConsultas {
       proveedores: contar('SELECT COUNT(*) AS n FROM proveedores WHERE usuario_id = ?'),
       // Las aprobaciones llegan en la fase F4.
       aprobacionesPendientes: 0,
+      tareasActivas: contar("SELECT COUNT(*) AS n FROM tareas WHERE usuario_id = ? AND estado IN ('en_cola','ejecutando')"),
+      tareasEsperando: contar("SELECT COUNT(*) AS n FROM tareas WHERE usuario_id = ? AND estado = 'esperando_usuario'"),
     };
   }
 }

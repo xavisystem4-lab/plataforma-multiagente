@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/rate-limit": "^11.2.0",
+    "@fastify/websocket": "^11.3.1",
     "@softgala/shared": "*",
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
@@ -22,9 +23,11 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "ws": "^8.22.0"
   }
 }

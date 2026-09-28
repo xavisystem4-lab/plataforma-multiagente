@@ -139,8 +139,10 @@ export interface AgentePublico {
 export const esquemaValidacion = z.object({
   nombre: z.string().trim().min(1).max(60),
   comando: z.string().trim().min(1, 'Escribe el comando').max(300),
+  /** El sandbox no tiene red salvo que la validación lo pida (p. ej. instalar dependencias). */
+  requiereRed: z.boolean().default(false),
 });
-export type Validacion = z.infer<typeof esquemaValidacion>;
+export type Validacion = z.output<typeof esquemaValidacion>;
 
 export const esquemaLimitesProyecto = z.object({
   maxAgentesSimultaneos: z.number().int().min(1).max(20),
@@ -230,4 +232,7 @@ export interface Resumen {
   agentesActivos: number;
   proveedores: number;
   aprobacionesPendientes: number;
+  tareasActivas: number;
+  /** Tareas que esperan una respuesta del usuario. */
+  tareasEsperando: number;
 }

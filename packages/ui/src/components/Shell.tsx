@@ -13,7 +13,7 @@ import {
 } from './Iconos';
 import { Logo } from './Logo';
 
-export type Pagina = 'panel' | 'proyectos' | 'agentes' | 'modelos' | 'auditoria' | 'seguridad';
+export type Pagina = 'panel' | 'tareas' | 'proyectos' | 'agentes' | 'modelos' | 'auditoria' | 'seguridad';
 
 interface ItemNav {
   id: Pagina | null;
@@ -27,7 +27,7 @@ const PRINCIPAL: ItemNav[] = [
   { id: 'panel', texto: 'Panel', Icono: IconoPanel },
   { id: 'proyectos', texto: 'Proyectos', Icono: IconoProyecto },
   { id: 'agentes', texto: 'Agentes', Icono: IconoAgentes },
-  { id: null, texto: 'Tareas', Icono: IconoTareas, fase: 'F2' },
+  { id: 'tareas', texto: 'Tareas', Icono: IconoTareas },
   { id: null, texto: 'Aprobaciones', Icono: IconoAprobar, fase: 'F4' },
 ];
 const ADMINISTRACION: ItemNav[] = [

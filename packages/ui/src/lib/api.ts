@@ -3,6 +3,9 @@ import type {
   AgentePublico,
   ErrorApi,
   EstadoRepositorio,
+  EventoTiempoReal,
+  SolicitudContinuar,
+  TareaPublica,
   PaginaAuditoria,
   ProveedorEdicion,
   ProveedorNuevo,
@@ -132,6 +135,35 @@ export class ClienteApi {
   estadoProyecto = (id: string) => this.solicitud<EstadoRepositorio>('GET', `/api/proyectos/${enc(id)}/estado`);
   habilitarAgente = (proyectoId: string, agenteId: string, habilitado: boolean) =>
     this.solicitud<ProyectoPublico>('PUT', `/api/proyectos/${enc(proyectoId)}/agentes/${enc(agenteId)}`, { habilitado });
+
+  // ---- Tareas (F2) ----
+  sistema = () => this.solicitud<{ sandbox: { disponible: boolean; motivo: string | null } }>('GET', '/api/sistema');
+  continuar = (proyectoId: string, d: SolicitudContinuar) =>
+    this.solicitud<TareaPublica>('POST', `/api/proyectos/${enc(proyectoId)}/continuar`, d);
+  tareas = (proyectoId?: string) =>
+    this.solicitud<TareaPublica[]>('GET', `/api/tareas${proyectoId ? `?proyectoId=${enc(proyectoId)}` : ''}`);
+  tarea = (id: string) => this.solicitud<TareaPublica>('GET', `/api/tareas/${enc(id)}`);
+  eventosTarea = (id: string) => this.solicitud<EventoTiempoReal[]>('GET', `/api/tareas/${enc(id)}/eventos`);
+  accionTarea = (id: string, accion: 'pausar' | 'reanudar' | 'cancelar') =>
+    this.solicitud<TareaPublica>('POST', `/api/tareas/${enc(id)}/${accion}`);
+  responder = (id: string, respuesta: string) =>
+    this.solicitud<TareaPublica>('POST', `/api/tareas/${enc(id)}/responder`, { respuesta });
+
+  /** Token de acceso vigente (lo renueva si hace falta), para autenticar el WebSocket. */
+  async tokenAcceso(): Promise<string> {
+    if (!this.accessToken && !(await this.refrescar())) throw this.sesionExpirada();
+    return this.accessToken!;
+  }
+
+  /** Fuerza una renovación (p. ej. si el WebSocket rechazó un token vencido). */
+  async renovarAcceso(): Promise<boolean> {
+    this.accessToken = null;
+    return this.refrescar();
+  }
+
+  urlTiempoReal(): string {
+    return `${this.servidor.replace(/^http/, 'ws')}/api/ws`;
+  }
 
   auditoria = (filtro: { accion?: string; antesDe?: number; limite?: number }) => {
     const q = new URLSearchParams();

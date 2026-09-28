@@ -37,7 +37,12 @@ const filtroAuditoria = z.object({
 const actorDe = (req: FastifyRequest): Actor => ({ id: req.usuario!.id, rol: req.usuario!.rol, ip: req.ip });
 const sinContenido = (rep: FastifyReply) => rep.code(204).send();
 
-export function rutasRecursos(app: FastifyInstance, s: Servicios, autenticar: preHandlerAsyncHookHandler): void {
+export function rutasRecursos(
+  app: FastifyInstance,
+  s: Servicios,
+  autenticar: preHandlerAsyncHookHandler,
+  alEliminarProyecto: (id: string) => Promise<void> = async () => {},
+): void {
   // Todas las rutas de este módulo exigen sesión.
   app.register(async (api) => {
     api.addHook('preHandler', autenticar);
@@ -95,7 +100,10 @@ export function rutasRecursos(app: FastifyInstance, s: Servicios, autenticar: pr
       s.proyectos.editar(actorDe(req), conId.parse(req.params).id, esquemaProyectoEdicion.parse(req.body)),
     );
     api.delete('/api/proyectos/:id', async (req, rep) => {
-      s.proyectos.eliminar(actorDe(req), conId.parse(req.params).id);
+      const { id } = conId.parse(req.params);
+      s.proyectos.eliminar(actorDe(req), id);
+      // Borra la copia local del repositorio y los worktrees del servidor.
+      await alEliminarProyecto(id).catch((err) => req.log.warn({ err }, 'No se pudo limpiar el espacio del proyecto'));
       return sinContenido(rep);
     });
     api.get(

@@ -1,0 +1,170 @@
+.tabla-clic tbody tr {
+  cursor: pointer;
+}
+.tabla-clic tbody tr:hover,
+.tabla-clic tbody tr:focus-visible {
+  background: var(--marino-50);
+  outline: none;
+}
+.celda-objetivo {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.titulo-tarea {
+  font-size: 22px !important;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.punto-vivo {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 6px;
+  animation: latir 1.2s ease-in-out infinite;
+}
+@keyframes latir {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.detalle-tarea {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+.detalle-tarea .tarjeta > p {
+  font-size: 13px;
+}
+.texto-agente {
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+  color: var(--texto) !important;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.lista-archivos {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.lista-archivos li {
+  padding: 4px 8px;
+  background: var(--gris-50);
+  border-radius: var(--radio-s);
+  overflow-wrap: anywhere;
+}
+
+.pregunta {
+  border-color: var(--marino-500);
+  background: var(--marino-50);
+  display: grid;
+  gap: 10px;
+}
+.pregunta textarea {
+  min-height: 80px;
+}
+
+.validacion summary {
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.salida {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--marino-950);
+  color: var(--gris-200);
+  border-radius: var(--radio-s);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.linea-tiempo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.evento {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  padding: 8px 6px;
+  border-left: 2px solid var(--gris-200);
+  font-size: 13px;
+}
+.evento .hora {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--texto-suave);
+  padding-top: 1px;
+}
+.cuerpo-evento {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.evento-agent-message {
+  border-left-color: var(--marino-500);
+  background: var(--marino-50);
+  border-radius: 0 var(--radio-s) var(--radio-s) 0;
+}
+.evento-file-changed {
+  border-left-color: var(--exito);
+}
+.evento-task-completed {
+  border-left-color: var(--exito);
+  background: var(--exito-fondo);
+}
+.evento-task-failed,
+.evento.con-error {
+  border-left-color: var(--error);
+}
+.evento-task-waiting,
+.evento-budget-warning,
+.evento-task-paused {
+  border-left-color: var(--aviso);
+  background: var(--aviso-fondo);
+}
+.evento .args {
+  color: var(--texto-suave);
+}
+.evento .resultado {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+.evento .resultado.error,
+.texto-error {
+  color: var(--error);
+}
+
+@media (max-width: 1100px) {
+  .detalle-tarea {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 820px) {
+  .celda-objetivo {
+    max-width: 180px;
+  }
+  .evento {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

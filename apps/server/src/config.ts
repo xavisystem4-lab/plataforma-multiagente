@@ -22,6 +22,15 @@ const esquemaConfig = z.object({
     .url()
     .refine((u) => u.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(u), 'GITHUB_API_URL debe usar HTTPS')
     .default('https://api.github.com'),
+  // Ejecución de tareas
+  MAX_TAREAS_SIMULTANEAS: z.coerce.number().int().min(1).max(64).default(4),
+  MAX_TURNOS_POR_EJECUCION: z.coerce.number().int().min(1).max(500).default(60),
+  // Sandbox Docker para las validaciones
+  SANDBOX_IMAGEN: z.string().default('node:22-bookworm-slim'),
+  SANDBOX_CPUS: z.string().regex(/^\d+(\.\d+)?$/).default('2'),
+  SANDBOX_MEMORIA: z.string().regex(/^\d+[kmg]$/i).default('2g'),
+  SANDBOX_USUARIO: z.string().regex(/^\d+(:\d+)?$/).default('1000:1000'),
+  TIMEOUT_VALIDACION_MIN: z.coerce.number().int().min(1).max(120).default(10),
 });
 
 export interface Config {
@@ -44,6 +53,15 @@ export interface Config {
   maxAgentesPorUsuario: number;
   maxProyectosPorUsuario: number;
   githubApi: string;
+  /** URL de clonado para "propietario/repo" (GitHub o GitHub Enterprise). */
+  urlClonado: (repositorio: string) => string;
+  ejecucion: {
+    maxSimultaneas: number;
+    maxTurnos: number;
+    maxTokensRespuesta: number;
+    timeoutValidacionMs: number;
+  };
+  sandbox: { imagen: string; cpus: string; memoria: string; usuario: string };
 }
 
 export class ErrorConfig extends Error {}
@@ -73,5 +91,19 @@ export function cargarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxAgentesPorUsuario: e.MAX_AGENTES_POR_USUARIO,
     maxProyectosPorUsuario: e.MAX_PROYECTOS_POR_USUARIO,
     githubApi: e.GITHUB_API_URL.replace(/\/+$/, ''),
+    urlClonado: (repo) => `${origenGit(e.GITHUB_API_URL)}/${repo}.git`,
+    ejecucion: {
+      maxSimultaneas: e.MAX_TAREAS_SIMULTANEAS,
+      maxTurnos: e.MAX_TURNOS_POR_EJECUCION,
+      maxTokensRespuesta: 16_000,
+      timeoutValidacionMs: e.TIMEOUT_VALIDACION_MIN * 60_000,
+    },
+    sandbox: { imagen: e.SANDBOX_IMAGEN, cpus: e.SANDBOX_CPUS, memoria: e.SANDBOX_MEMORIA, usuario: e.SANDBOX_USUARIO },
   };
+}
+
+/** api.github.com → https://github.com; GitHub Enterprise https://host/api/v3 → https://host. */
+function origenGit(apiUrl: string): string {
+  const u = new URL(apiUrl);
+  return u.hostname === 'api.github.com' ? 'https://github.com' : u.origin;
 }

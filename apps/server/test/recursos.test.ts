@@ -321,7 +321,8 @@ describe('proyectos de GitHub', () => {
         limites: { maxAgentesSimultaneos: 5, presupuestoMensualUsd: 20 },
       })
     ).json<ProyectoPublico>();
-    expect(editado.validaciones).toEqual([{ nombre: 'Pruebas', comando: 'npm test' }]);
+    // requiereRed toma false por defecto: el sandbox no tiene red salvo que se pida.
+    expect(editado.validaciones).toEqual([{ nombre: 'Pruebas', comando: 'npm test', requiereRed: false }]);
     expect(simulado.llamadas.length).toBe(antes); // sin cambios de token/rama no se consulta GitHub
 
     const rotado = (
@@ -389,6 +390,8 @@ describe('auditoría y resumen', () => {
       agentesActivos: 1,
       proveedores: 1,
       aprobacionesPendientes: 0,
+      tareasActivas: 0,
+      tareasEsperando: 0,
     });
     expect((await pedir('GET', '/api/resumen', undefined, tokenUsuario)).json<Resumen>().agentes).toBe(0);
   });

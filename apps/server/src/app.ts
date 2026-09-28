@@ -1,5 +1,7 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
+import path from 'node:path';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { ErrorApi } from '@softgala/shared';
 import { ZodError } from 'zod';
@@ -8,8 +10,13 @@ import { ServicioAuth } from './auth/servicio';
 import type { Config } from './config';
 import type { Db } from './db';
 import { ErrorApp } from './errores';
+import { BusEventos } from './ejecucion/bus';
+import { EspaciosGit, type OpcionesGit } from './ejecucion/git';
+import { Orquestador } from './ejecucion/orquestador';
+import { detectarSandbox, type Sandbox } from './ejecucion/sandbox';
 import { ClienteGitHub } from './externo/github';
-import { crearFabricaAdaptadores } from './modelos/adaptadores';
+import { crearFabricaAdaptadores, type FabricaAdaptadores } from './modelos/adaptadores';
+import { rutasTareas, rutaTiempoReal } from './rutas/tareas';
 import { rutasRecursos, type Servicios } from './rutas/recursos';
 import { Boveda } from './security/boveda';
 import { ServicioAgentes } from './servicios/agentes';
@@ -26,11 +33,22 @@ export interface Dependencias {
   /** fetch para llamadas salientes (GitHub, proveedores); inyectable para pruebas. */
   fetchExterno?: typeof fetch;
   registrarLogs?: boolean;
+  /** Sustitutos para pruebas: modelos simulados, sandbox y opciones de Git. */
+  adaptadores?: FabricaAdaptadores;
+  sandbox?: Sandbox;
+  git?: Partial<Omit<OpcionesGit, 'raiz'>>;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    orquestador: Orquestador;
+  }
 }
 
 const cuerpoError = (codigo: string, mensaje: string): ErrorApi => ({ error: { codigo, mensaje } });
 
-export async function construirApp({ config, db, ahora, fetchExterno = fetch, registrarLogs = true }: Dependencias): Promise<FastifyInstance> {
+export async function construirApp(dep: Dependencias): Promise<FastifyInstance> {
+  const { config, db, ahora, fetchExterno = fetch, registrarLogs = true } = dep;
   const app = Fastify({
     logger: registrarLogs
       ? {
@@ -48,6 +66,8 @@ export async function construirApp({ config, db, ahora, fetchExterno = fetch, re
     origin: (origen, cb) => cb(null, !origen || config.origenesCors.includes(origen)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
+
+  await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 
   await app.register(rateLimit, {
     global: false,
@@ -94,7 +114,7 @@ export async function construirApp({ config, db, ahora, fetchExterno = fetch, re
     config,
     boveda: new Boveda(config.claveMaestra),
     github: new ClienteGitHub(fetchExterno, config.githubApi),
-    adaptadores: crearFabricaAdaptadores(fetchExterno),
+    adaptadores: dep.adaptadores ?? crearFabricaAdaptadores(fetchExterno),
     ahora: reloj,
     log: app.log,
   };
@@ -107,9 +127,22 @@ export async function construirApp({ config, db, ahora, fetchExterno = fetch, re
     consultas: new ServicioConsultas(ctx),
   };
 
-  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.2.0' }));
+  const bus = new BusEventos(db, reloj);
+  const git = new EspaciosGit({
+    raiz: path.join(config.dirDatos, 'espacios'),
+    protocolos: dep.git?.protocolos ?? 'https',
+    urlClonado: dep.git?.urlClonado ?? config.urlClonado,
+  });
+  const sandbox = dep.sandbox ?? (await detectarSandbox(config.sandbox));
+  const orquestador = new Orquestador(ctx, servicios, bus, git, sandbox, config.ejecucion);
+  app.decorate('orquestador', orquestador);
+  app.addHook('onClose', async () => orquestador.detener());
+
+  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.3.0' }));
   rutasAuth(app, auth, autenticar);
-  rutasRecursos(app, servicios, autenticar);
+  rutasRecursos(app, servicios, autenticar, (proyectoId) => orquestador.limpiarProyecto(proyectoId));
+  rutasTareas(app, orquestador, autenticar);
+  rutaTiempoReal(app, bus, auth, config);
 
   return app;
 }

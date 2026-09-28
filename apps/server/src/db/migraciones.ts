@@ -122,4 +122,52 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
       CREATE INDEX idx_auditoria_usuario ON auditoria(usuario_id, id);
     `,
   },
+  {
+    version: 3,
+    nombre: 'tareas_eventos',
+    sql: `
+      CREATE TABLE tareas (
+        id TEXT PRIMARY KEY,
+        usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        proyecto_id TEXT NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+        agente_id TEXT NOT NULL REFERENCES agentes(id) ON DELETE RESTRICT,
+        objetivo TEXT NOT NULL,
+        estado TEXT NOT NULL,
+        rama TEXT NOT NULL,
+        -- Pregunta pendiente al usuario y el id de la llamada de herramienta que la hizo.
+        pregunta TEXT,
+        pregunta_llamada TEXT,
+        resumen TEXT,
+        error TEXT,
+        -- Conversación con el modelo (formato interno) para poder reanudar.
+        conversacion TEXT NOT NULL DEFAULT '[]',
+        archivos TEXT NOT NULL DEFAULT '[]',
+        validaciones TEXT NOT NULL DEFAULT '[]',
+        tokens_entrada INTEGER NOT NULL DEFAULT 0,
+        tokens_salida INTEGER NOT NULL DEFAULT 0,
+        costo_usd REAL,
+        -- Tiempo de ejecución acumulado (no cuenta pausas), para el límite de minutos del agente.
+        ms_ejecucion INTEGER NOT NULL DEFAULT 0,
+        creada_en TEXT NOT NULL,
+        iniciada_en TEXT,
+        terminada_en TEXT,
+        actualizada_en TEXT NOT NULL
+      );
+      CREATE INDEX idx_tareas_proyecto ON tareas(proyecto_id, creada_en);
+      CREATE INDEX idx_tareas_usuario_estado ON tareas(usuario_id, estado);
+
+      CREATE TABLE eventos (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id TEXT NOT NULL,
+        proyecto_id TEXT NOT NULL,
+        tarea_id TEXT,
+        agente_id TEXT,
+        tipo TEXT NOT NULL,
+        datos TEXT NOT NULL,
+        fecha TEXT NOT NULL
+      );
+      CREATE INDEX idx_eventos_usuario ON eventos(usuario_id, seq);
+      CREATE INDEX idx_eventos_tarea ON eventos(tarea_id, seq);
+    `,
+  },
 ];

@@ -327,25 +327,28 @@ function Validaciones({ inicial, alGuardar }: { inicial: Validacion[]; alGuardar
   const [filas, setFilas] = useState<Validacion[]>(inicial);
   const [guardando, setGuardando] = useState(false);
   const cambiada = JSON.stringify(filas) !== JSON.stringify(inicial);
-  const editar = (i: number, campo: keyof Validacion, valor: string) =>
+  const editar = <K extends keyof Validacion>(i: number, campo: K, valor: Validacion[K]) =>
     setFilas((f) => f.map((v, j) => (j === i ? { ...v, [campo]: valor } : v)));
 
   return (
     <section className="tarjeta">
       <div className="seccion-titulo">
         <h2>Validaciones</h2>
-        <button className="boton boton-chico" onClick={() => setFilas((f) => [...f, { nombre: '', comando: '' }])} disabled={filas.length >= 20}>
+        <button className="boton boton-chico" onClick={() => setFilas((f) => [...f, { nombre: '', comando: '', requiereRed: false }])} disabled={filas.length >= 20}>
           Agregar
         </button>
       </div>
       <p style={{ margin: '0 0 12px', color: 'var(--texto-suave)', fontSize: 13 }}>
-        Comandos que se ejecutarán en el sandbox antes de proponerte cambios (tests, lint, build). Se informa su resultado real.
+        Comandos que se ejecutan en el sandbox al terminar cada tarea (tests, lint, build). Se informa su resultado real. Sin internet salvo que marques «Red».
       </p>
       <div style={{ display: 'grid', gap: 8 }}>
         {filas.map((v, i) => (
           <div key={i} className="fila-validacion">
             <input className="entrada" aria-label="Nombre" placeholder="Pruebas" value={v.nombre} onChange={(e) => editar(i, 'nombre', e.target.value)} />
             <input className="entrada mono" aria-label="Comando" placeholder="npm test" value={v.comando} onChange={(e) => editar(i, 'comando', e.target.value)} />
+            <label className="red-validacion" title="El sandbox no tiene internet salvo que lo marques (p. ej. para instalar dependencias)">
+              <input type="checkbox" checked={v.requiereRed} onChange={(e) => editar(i, 'requiereRed', e.target.checked)} /> Red
+            </label>
             <button className="boton boton-chico boton-peligro" onClick={() => setFilas((f) => f.filter((_, j) => j !== i))} aria-label="Quitar validación">
               Quitar
             </button>

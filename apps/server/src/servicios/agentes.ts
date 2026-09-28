@@ -118,6 +118,10 @@ export class ServicioAgentes {
 
   eliminar(actor: Actor, id: string): void {
     const a = this.obtener(actor, id);
+    const tareas = (this.ctx.db.prepare('SELECT COUNT(*) AS n FROM tareas WHERE agente_id = ?').get(id) as { n: number }).n;
+    if (tareas > 0) {
+      throw new ErrorApp(409, 'AGENTE_CON_HISTORIAL', `El agente tiene ${tareas} tarea(s) en su historial; desactívalo en lugar de eliminarlo.`);
+    }
     this.ctx.db.prepare('DELETE FROM agentes WHERE id = ?').run(id);
     auditar(this.ctx.db, { accion: 'agente.eliminado', usuarioId: actor.id, agenteId: id, detalle: { nombre: a.nombre }, ip: actor.ip });
   }

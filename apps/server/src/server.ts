@@ -7,6 +7,10 @@ async function iniciar(): Promise<void> {
   const config = cargarConfig();
   const db = abrirDb(path.join(config.dirDatos, 'multiagente.db'));
   const app = await construirApp({ config, db });
+  const recuperadas = app.orquestador.recuperarAlIniciar();
+  if (recuperadas) app.log.warn(`${recuperadas} tarea(s) quedaron pausadas por el reinicio; pueden reanudarse.`);
+  const { disponible, motivo } = app.orquestador.infoSandbox;
+  if (!disponible) app.log.warn(motivo ?? 'Sandbox no disponible: las validaciones no se ejecutarán.');
 
   const esLocal = ['127.0.0.1', 'localhost', '::1'].includes(config.host);
   if (!esLocal && !config.confiarProxy) {

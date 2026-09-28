@@ -40,12 +40,14 @@ Existe hoy (F0–F1): `usuarios`, `sesiones`, `auditoria`, `proveedores` (clave 
 validaciones, límites, avisos) y `proyecto_agentes`. Todos los recursos pertenecen a un usuario; otro usuario
 recibe 404.
 
+F2 agrega `tareas` (estado, rama, conversación para reanudar, consumo, validaciones) y `eventos`
+(secuencia creciente para reenviar al reconectar).
+
 Planeado:
 
-- `tareas`, `ejecuciones`, `pasos` (cada llamada a herramienta o modelo).
 - `propuestas`, `revisiones`, `decisiones` (colaboración y registro de quién decidió qué).
 - `conjuntos_cambios` (diff, rama, commit), `aprobaciones`, `validaciones` (comando, resultado real, salida).
-- `eventos` (secuencia creciente para reenviar al reconectar), `presupuestos`.
+- `presupuestos` por agente y periodo.
 
 ## API
 
@@ -59,14 +61,35 @@ Planeado:
 | GET/POST/PATCH/DELETE | `/api/proyectos`, `/api/proyectos/:id` · GET `/api/proyectos/:id/estado` | ✅ |
 | PUT | `/api/proyectos/:id/agentes/:agenteId` (habilitar/deshabilitar) | ✅ |
 | GET | `/api/auditoria`, `/api/resumen`, `/api/catalogo` | ✅ |
-| POST | `/api/proyectos/:id/continuar` | F2 |
-| POST | `/api/tareas/:id/pausar`, `/reanudar`, `/cancelar` | F2 |
+| POST | `/api/proyectos/:id/continuar` | ✅ |
+| GET | `/api/tareas`, `/api/tareas/:id`, `/api/tareas/:id/eventos` · GET `/api/sistema` | ✅ |
+| POST | `/api/tareas/:id/pausar`, `/reanudar`, `/cancelar`, `/responder` | ✅ |
 | GET | `/api/tareas/:id/diff` | F4 |
 | POST | `/api/aprobaciones/:id/aprobar`, `/rechazar` | F4 |
 | POST | `/api/cambios/:id/revertir` | F4 |
-| WS | `/api/ws?since=<seq>` | F2 |
+| WS | `/api/ws` (autenticación en el primer mensaje, reenvío desde `desde`) | ✅ |
 
 Los tipos de evento de tiempo real están en `packages/shared/src/eventos.ts`.
+
+## Implementación actual de F2
+
+- **Orquestador** (`apps/server/src/ejecucion/orquestador.ts`): cola con límite global de tareas simultáneas,
+  una tarea activa por proyecto y un agente por tarea (el trabajo con varios agentes llega en F3). El ciclo:
+  turno del modelo → herramientas → resultados, guardando la conversación solo en puntos completos para poder
+  reanudarla. Pausar, cancelar, preguntas al usuario, límites de tokens, costo, tiempo, turnos y presupuesto.
+- **Adaptadores**: Anthropic con el SDK oficial (bucle manual; el contenido del asistente se reenvía sin
+  cambios) y OpenAI o compatibles vía `/chat/completions`.
+- **Git** (`ejecucion/git.ts`): el token viaja por variables de entorno (`GIT_CONFIG_*`), nunca en la URL, en
+  los argumentos ni en disco; hooks desactivados; protocolos restringidos; un worktree por tarea.
+- **Herramientas** (`ejecucion/herramientas.ts`): cada permiso del agente habilita herramientas concretas; el
+  permiso y la entrada se validan en el servidor; las rutas se confinan al worktree (sin `..`, rutas
+  absolutas, `.git` ni symlinks que escapen).
+- **Sandbox** (`ejecucion/sandbox.ts`): Docker sin red por defecto, sin capacidades, `no-new-privileges`,
+  límites de CPU, memoria y procesos, y tiempo máximo. Solo ejecuta los comandos de validación configurados
+  por el usuario, nunca texto del modelo. Si Docker no está disponible, las validaciones se reportan como
+  no ejecutadas.
+- **Tiempo real**: los eventos se guardan con secuencia y se difunden solo al usuario dueño. El WebSocket
+  revalida la sesión cada 30 s.
 
 ## Flujo de "Continuar proyecto" (F2–F4)
 

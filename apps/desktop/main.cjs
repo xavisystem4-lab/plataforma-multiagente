@@ -162,7 +162,7 @@ function guionLogin(email, password, pagina, clic) {
     const clic = ${JSON.stringify(clic ?? '')};
     if (clic) {
       await new Promise((r) => setTimeout(r, 1200));
-      [...document.querySelectorAll('.contenido button')].find((b) => b.textContent.includes(clic))?.click();
+      [...document.querySelectorAll('.contenido button, .contenido tr[tabindex]')].find((b) => b.textContent.includes(clic))?.click();
     }
   })()`;
 }

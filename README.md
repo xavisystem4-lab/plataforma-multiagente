@@ -12,8 +12,8 @@ así que el trabajo continúa aunque cierres la laptop.
 |---|---|---|
 | F0 | Monorepo, backend con login seguro, app Windows (Electron) con tema SoftGala | ✅ Completada |
 | F1 | Proyectos de GitHub, alta de agentes (multi-proveedor), bóveda de claves, auditoría visible | ✅ Completada |
-| F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | Siguiente |
-| F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | Pendiente |
+| F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | ✅ Completada |
+| F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | Siguiente |
 | F4 | Diff, aprobación, reversión | Pendiente |
 | F5 | Instalador de Windows y APK de Android (Capacitor) | Pendiente |
 | F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
@@ -23,7 +23,7 @@ El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 ## Estructura
 
 ```
-apps/server      API Fastify + TypeScript: auth, proveedores, agentes, proyectos, auditoría
+apps/server      API Fastify + TypeScript: auth, recursos, orquestador, sandbox, WebSocket
 apps/desktop     App de Windows (Electron): ventana, almacén cifrado con DPAPI
 apps/mobile      App Android (Capacitor) — fase F5
 packages/ui      Interfaz React compartida por Windows y Android
@@ -34,7 +34,10 @@ infra/           Docker, Caddy — fase F6
 ## Requisitos
 
 - Node.js 22.13 o superior (probado con Node 24).
-- Para la APK (F5): JDK 17+ y Android SDK. Para el sandbox (F2): Docker Desktop.
+- Git en el servidor (lo usa el orquestador para clonar y crear ramas).
+- **Docker** en el servidor para ejecutar las validaciones de forma aislada. Sin Docker, los agentes igual
+  leen y editan código, pero las validaciones se reportan como **no ejecutadas** (nunca como exitosas).
+- Para la APK (F5): JDK 17+ y Android SDK.
 
 ## Primeros pasos (desarrollo local)
 
@@ -69,6 +72,21 @@ No existe registro público: los usuarios se crean desde la terminal del servido
 
 Variables opcionales en `.env`: `MAX_AGENTES_POR_USUARIO`, `MAX_PROYECTOS_POR_USUARIO` y
 `GITHUB_API_URL` (para GitHub Enterprise Server).
+
+## Uso (F2): Continuar proyecto
+
+1. Pulsa **Continuar proyecto** (en el Panel o en Tareas), elige el proyecto y describe el objetivo.
+   Si hay una tarea pausada, puedes reanudarla con un clic.
+2. El servidor clona o actualiza el repositorio y crea una rama `agentes/<objetivo>-<id>`. El agente trabaja
+   ahí con sus herramientas autorizadas; **nunca hace push**.
+3. En **Tareas** ves en vivo cada paso, archivo modificado, validación y mensaje del agente. Si el agente
+   necesita una decisión tuya, la tarea espera tu respuesta.
+4. Puedes **pausar**, **reanudar** y **cancelar**. Si el servidor se reinicia, las tareas quedan pausadas
+   y se pueden reanudar.
+5. Al terminar se ejecutan las validaciones del proyecto y se informa su resultado real.
+
+Límites que detienen la ejecución: tokens, costo estimado y minutos por agente, presupuesto mensual del
+proyecto, máximo de turnos por ejecución y una tarea activa por proyecto.
 
 ## Pruebas
 

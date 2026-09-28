@@ -168,6 +168,12 @@ export class ServicioProveedores {
     return resultado;
   }
 
+  /** Uso interno del orquestador: credenciales descifradas. Nunca se envían al cliente. */
+  credenciales(usuarioId: string, id: string): { tipo: TipoProveedor; apiKey: string | null; urlBase: string | null } {
+    const p = this.fila({ id: usuarioId, rol: 'usuario', ip: null }, id);
+    return { tipo: p.tipo, apiKey: this.clave(p), urlBase: p.url_base };
+  }
+
   /** Verifica que el proveedor exista y pertenezca al usuario. */
   asegurarPropio(actor: Actor, id: string): void {
     this.fila(actor, id);

@@ -1,0 +1,408 @@
+import { NOMBRE_ESTADO, type EstadoTarea, type EventoTiempoReal, type ResultadoValidacion, type TareaPublica } from '@softgala/shared';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Alerta, BotonCarga, Encabezado, fecha, Vacio } from '../components/Comunes';
+import { ContinuarProyecto } from '../components/ContinuarProyecto';
+import { IconoPlay, IconoTareas } from '../components/Iconos';
+import { mensajeError, useDatos } from '../lib/datos';
+import { useSesion } from '../lib/sesion';
+import { useEventos, useTiempoReal } from '../lib/tiempoReal';
+import '../styles/tareas.css';
+
+const CLASE_ESTADO: Record<EstadoTarea, string> = {
+  en_cola: 'etiqueta',
+  ejecutando: 'etiqueta etiqueta-marino',
+  pausada: 'etiqueta etiqueta-aviso',
+  esperando_usuario: 'etiqueta etiqueta-aviso',
+  completada: 'etiqueta etiqueta-exito',
+  fallida: 'etiqueta etiqueta-error',
+  cancelada: 'etiqueta',
+};
+
+export const EtiquetaEstado = ({ estado }: { estado: EstadoTarea }) => (
+  <span className={CLASE_ESTADO[estado]}>
+    {estado === 'ejecutando' && <span className="punto-vivo" aria-hidden="true" />}
+    {NOMBRE_ESTADO[estado]}
+  </span>
+);
+
+export function Tareas({ abierta, alAbrir }: { abierta: string | null; alAbrir(id: string | null): void }) {
+  const { api } = useSesion();
+  const { datos, error, recargar } = useDatos(useCallback(() => api.tareas(), [api]));
+  const { datos: sistema } = useDatos(useCallback(() => api.sistema(), [api]));
+  const [continuando, setContinuando] = useState(false);
+
+  // La lista se actualiza sola con los cambios de estado.
+  useEventos((e) => {
+    if (e.tipo.startsWith('task.')) void recargar();
+  });
+
+  if (abierta) return <DetalleTarea id={abierta} alVolver={() => alAbrir(null)} />;
+
+  return (
+    <>
+      <Encabezado titulo="Tareas" texto="Trabajo de los agentes en el servidor. Se actualiza en tiempo real.">
+        <button className="boton boton-primario" onClick={() => setContinuando(true)}>
+          <IconoPlay /> Continuar proyecto
+        </button>
+      </Encabezado>
+      {sistema && !sistema.sandbox.disponible && (
+        <div style={{ marginBottom: 16 }}>
+          <Alerta tipo="aviso">
+            {sistema.sandbox.motivo} Los agentes pueden leer y editar código, pero las validaciones (tests, lint, build) se reportarán
+            como <strong>no ejecutadas</strong> hasta instalar Docker en el servidor.
+          </Alerta>
+        </div>
+      )}
+      {error && <Alerta>{error}</Alerta>}
+
+      {datos?.length === 0 && (
+        <Vacio
+          icono={<IconoTareas />}
+          titulo="Aún no hay tareas"
+          texto="Pulsa «Continuar proyecto», elige un proyecto y describe el objetivo. El agente trabajará en una rama nueva."
+          accion={
+            <button className="boton boton-primario" onClick={() => setContinuando(true)}>
+              Continuar proyecto
+            </button>
+          }
+        />
+      )}
+
+      {datos && datos.length > 0 && (
+        <section className="tarjeta" style={{ padding: 0 }}>
+          <div className="tabla-contenedor">
+            <table className="tabla tabla-clic">
+              <thead>
+                <tr>
+                  <th>Objetivo</th>
+                  <th>Proyecto</th>
+                  <th>Agente</th>
+                  <th>Estado</th>
+                  <th>Creada</th>
+                </tr>
+              </thead>
+              <tbody>
+                {datos.map((t) => (
+                  <tr key={t.id} onClick={() => alAbrir(t.id)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && alAbrir(t.id)}>
+                    <td className="celda-objetivo">{t.objetivo}</td>
+                    <td>{t.proyectoNombre}</td>
+                    <td>{t.agenteNombre}</td>
+                    <td>
+                      <EtiquetaEstado estado={t.estado} />
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fecha(t.creadaEn)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {continuando && (
+        <ContinuarProyecto
+          alCerrar={() => setContinuando(false)}
+          alIniciar={(t) => {
+            setContinuando(false);
+            alAbrir(t.id);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
+  const { api } = useSesion();
+  const { conectado } = useTiempoReal();
+  const [tarea, setTarea] = useState<TareaPublica | null>(null);
+  const [eventos, setEventos] = useState<EventoTiempoReal[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [accion, setAccion] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    try {
+      const [t, ev] = await Promise.all([api.tarea(id), api.eventosTarea(id)]);
+      setTarea(t);
+      setEventos(ev);
+      setError(null);
+    } catch (err) {
+      setError(mensajeError(err));
+    }
+  }, [api, id]);
+
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
+  // Eventos en vivo de esta tarea; los cambios de estado recargan los datos completos.
+  useEventos((e) => {
+    if (e.tareaId !== id) return;
+    setEventos((act) => (act.some((x) => x.seq === e.seq) ? act : [...act, e]));
+    if (e.tipo.startsWith('task.') || e.tipo === 'validation.result' || e.tipo === 'file.changed') void api.tarea(id).then(setTarea).catch(() => {});
+  });
+
+  // Al reconectar, recupera lo que haya cambiado mientras no había conexión.
+  useEffect(() => {
+    if (conectado) void cargar();
+  }, [conectado, cargar]);
+
+  async function ejecutar(nombre: 'pausar' | 'reanudar' | 'cancelar') {
+    if (nombre === 'cancelar' && !window.confirm('¿Cancelar la tarea? Los cambios ya hechos quedan en su rama.')) return;
+    setAccion(nombre);
+    try {
+      setTarea(await api.accionTarea(id, nombre));
+    } catch (err) {
+      setError(mensajeError(err));
+    } finally {
+      setAccion(null);
+    }
+  }
+
+  if (!tarea) {
+    return (
+      <>
+        <button className="boton boton-texto volver" onClick={alVolver}>
+          ← Tareas
+        </button>
+        {error ? <Alerta>{error}</Alerta> : <p>Cargando…</p>}
+      </>
+    );
+  }
+
+  const activa = tarea.estado === 'ejecutando' || tarea.estado === 'en_cola';
+
+  return (
+    <>
+      <button className="boton boton-texto volver" onClick={alVolver}>
+        ← Tareas
+      </button>
+      <div className="encabezado">
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
+            <EtiquetaEstado estado={tarea.estado} />
+            <span className={`etiqueta ${conectado ? 'etiqueta-exito' : ''}`} title="Conexión en tiempo real">
+              {conectado ? 'En vivo' : 'Sin conexión en vivo'}
+            </span>
+          </div>
+          <h1 className="titulo-tarea">{tarea.objetivo}</h1>
+          <p>
+            {tarea.proyectoNombre} · {tarea.agenteNombre} · rama <span className="mono">{tarea.rama}</span>
+          </p>
+        </div>
+        <div className="acciones">
+          {activa && (
+            <BotonCarga className="boton" cargando={accion === 'pausar'} onClick={() => void ejecutar('pausar')}>
+              Pausar
+            </BotonCarga>
+          )}
+          {tarea.estado === 'pausada' && (
+            <BotonCarga cargando={accion === 'reanudar'} onClick={() => void ejecutar('reanudar')}>
+              <IconoPlay /> Reanudar
+            </BotonCarga>
+          )}
+          {(activa || tarea.estado === 'pausada' || tarea.estado === 'esperando_usuario') && (
+            <BotonCarga className="boton boton-peligro" cargando={accion === 'cancelar'} onClick={() => void ejecutar('cancelar')}>
+              Cancelar
+            </BotonCarga>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+        {error && <Alerta>{error}</Alerta>}
+        {tarea.error && <Alerta tipo={tarea.estado === 'fallida' ? 'error' : 'aviso'}>{tarea.error}</Alerta>}
+        {tarea.estado === 'esperando_usuario' && tarea.pregunta && <Pregunta tarea={tarea} alResponder={setTarea} />}
+      </div>
+
+      <div className="detalle-tarea">
+        <section className="tarjeta">
+          <h2 style={{ marginBottom: 12 }}>Actividad</h2>
+          <LineaTiempo eventos={eventos} />
+        </section>
+
+        <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+          {tarea.resumen && (
+            <section className="tarjeta">
+              <h2>Resumen del agente</h2>
+              <p className="texto-agente">{tarea.resumen}</p>
+            </section>
+          )}
+          <section className="tarjeta">
+            <h2>Validaciones</h2>
+            <Validaciones lista={tarea.validaciones} />
+          </section>
+          <section className="tarjeta">
+            <h2>Archivos modificados</h2>
+            {tarea.archivosModificados.length ? (
+              <ul className="lista-archivos">
+                {tarea.archivosModificados.map((a) => (
+                  <li key={a} className="mono">
+                    {a}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Ninguno todavía.</p>
+            )}
+            <p style={{ fontSize: 12, marginTop: 10 }}>La revisión del diff y la aprobación para integrar llegan en la fase F4.</p>
+          </section>
+          <section className="tarjeta">
+            <h2>Consumo</h2>
+            <dl className="datos-lista" style={{ marginTop: 8 }}>
+              <dt>Tokens</dt>
+              <dd>
+                {tarea.uso.tokensEntrada.toLocaleString('es-MX')} entrada · {tarea.uso.tokensSalida.toLocaleString('es-MX')} salida
+              </dd>
+              <dt>Costo</dt>
+              <dd>{tarea.uso.costoUsd === null ? 'No estimable para este modelo' : `≈ ${tarea.uso.costoUsd.toFixed(4)} USD (estimado)`}</dd>
+              <dt>Creada</dt>
+              <dd>{fecha(tarea.creadaEn)}</dd>
+              {tarea.terminadaEn && (
+                <>
+                  <dt>Terminada</dt>
+                  <dd>{fecha(tarea.terminadaEn)}</dd>
+                </>
+              )}
+            </dl>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Pregunta({ tarea, alResponder }: { tarea: TareaPublica; alResponder(t: TareaPublica): void }) {
+  const { api } = useSesion();
+  const [respuesta, setRespuesta] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    try {
+      alResponder(await api.responder(tarea.id, respuesta));
+    } catch (err) {
+      setError(mensajeError(err));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form className="tarjeta pregunta" onSubmit={enviar}>
+      <strong>El agente necesita tu intervención</strong>
+      <p className="texto-agente">{tarea.pregunta}</p>
+      {error && <Alerta>{error}</Alerta>}
+      <textarea className="entrada" value={respuesta} onChange={(e) => setRespuesta(e.target.value)} placeholder="Escribe tu respuesta o decisión…" aria-label="Respuesta" />
+      <div>
+        <BotonCarga type="submit" cargando={enviando} disabled={!respuesta.trim()}>
+          Responder y continuar
+        </BotonCarga>
+      </div>
+    </form>
+  );
+}
+
+function Validaciones({ lista }: { lista: ResultadoValidacion[] }) {
+  if (!lista.length) return <p>Aún no se han ejecutado.</p>;
+  const clase = { exitosa: 'etiqueta-exito', fallida: 'etiqueta-error', no_ejecutada: 'etiqueta-aviso' };
+  const texto = { exitosa: 'Exitosa', fallida: 'Fallida', no_ejecutada: 'No ejecutada' };
+  return (
+    <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+      {lista.map((v) => (
+        <details key={v.nombre} className="validacion">
+          <summary>
+            <span className={`etiqueta ${clase[v.estado]}`}>{texto[v.estado]}</span> <strong>{v.nombre}</strong>{' '}
+            <span className="mono" style={{ color: 'var(--texto-suave)' }}>
+              {v.comando}
+            </span>
+          </summary>
+          <pre className="salida">{v.salida || '(sin salida)'}</pre>
+        </details>
+      ))}
+    </div>
+  );
+}
+
+const ETIQUETAS: Partial<Record<EventoTiempoReal['tipo'], string>> = {
+  'task.created': 'Tarea creada',
+  'agent.step': 'Paso',
+  'task.started': 'Inició la ejecución',
+  'task.resumed': 'Se reanudó',
+  'task.paused': 'Pausada',
+  'task.waiting': 'Pregunta al usuario',
+  'task.completed': 'Tarea completada',
+  'task.failed': 'Tarea fallida',
+  'task.cancelled': 'Tarea cancelada',
+  'tool.call': 'Herramienta',
+  'file.changed': 'Archivo modificado',
+  'validation.result': 'Validación',
+  'budget.warning': 'Aviso de consumo',
+};
+
+function LineaTiempo({ eventos }: { eventos: EventoTiempoReal[] }) {
+  // Desplaza solo la lista (no la página) para mostrar lo más reciente.
+  const lista = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
+  }, [eventos.length]);
+  // Los resultados se muestran junto a su llamada; los pasos de estado internos se omiten.
+  const visibles = eventos.filter((e) => e.tipo !== 'tool.result' && !(e.tipo === 'agent.step' && !(e.datos as { mensaje?: string }).mensaje));
+
+  if (!visibles.length) return <p>Esperando actividad…</p>;
+  return (
+    <ol className="linea-tiempo" ref={lista}>
+      {visibles.map((e) => {
+        const d = e.datos as Record<string, unknown>;
+        const resultado =
+          e.tipo === 'tool.call'
+            ? (eventos.find((x) => x.tipo === 'tool.result' && x.seq > e.seq && (x.datos as { herramienta: string }).herramienta === d.herramienta)?.datos as
+                | { error: boolean; resumen: string }
+                | undefined)
+            : undefined;
+        return (
+          <li key={e.seq} className={`evento evento-${e.tipo.replace('.', '-')}${resultado?.error ? ' con-error' : ''}`}>
+            <span className="hora">{new Date(e.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+            <div className="cuerpo-evento">
+              {e.tipo === 'agent.message' ? (
+                <>
+                  <strong>{d.autor === 'usuario' ? 'Tú' : 'Agente'}</strong>
+                  <p className="texto-agente">{String(d.texto)}</p>
+                </>
+              ) : e.tipo === 'tool.call' ? (
+                <>
+                  <strong className="mono">{String(d.herramienta)}</strong> <span className="mono args">{resumenArgs(d.entrada)}</span>
+                  {resultado && <div className={`resultado ${resultado.error ? 'error' : ''}`}>{resultado.resumen.split('\n')[0]}</div>}
+                </>
+              ) : e.tipo === 'validation.result' ? (
+                <>
+                  <strong>Validación «{String(d.nombre)}»:</strong> {String(d.estado).replace('_', ' ')}
+                </>
+              ) : e.tipo === 'file.changed' ? (
+                <>
+                  <strong>Archivo modificado:</strong> <span className="mono">{String(d.ruta)}</span>
+                </>
+              ) : (
+                <>
+                  <strong>{ETIQUETAS[e.tipo] ?? e.tipo}</strong>
+                  {typeof d.mensaje === 'string' && <span> — {d.mensaje}</span>}
+                  {typeof d.pregunta === 'string' && <p className="texto-agente">{d.pregunta}</p>}
+                  {typeof d.error === 'string' && <span className="texto-error"> — {d.error}</span>}
+                  {typeof d.motivo === 'string' && <span> — {d.motivo}</span>}
+                </>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function resumenArgs(entrada: unknown): string {
+  if (!entrada || typeof entrada !== 'object') return '';
+  const e = entrada as Record<string, unknown>;
+  return String(e.ruta ?? e.texto ?? e.nombre ?? e.mensaje ?? '');
+}
