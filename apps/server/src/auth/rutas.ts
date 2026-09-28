@@ -28,8 +28,11 @@ export function crearAutenticador(config: Config, auth: ServicioAuth) {
   };
 }
 
-export function rutasAuth(app: FastifyInstance, auth: ServicioAuth, config: Config): void {
-  const autenticar = crearAutenticador(config, auth);
+export function rutasAuth(
+  app: FastifyInstance,
+  auth: ServicioAuth,
+  autenticar: ReturnType<typeof crearAutenticador>,
+): void {
   const usuario = (req: FastifyRequest) => req.usuario!;
 
   app.post(

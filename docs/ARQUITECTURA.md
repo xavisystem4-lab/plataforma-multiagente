@@ -35,15 +35,13 @@ no puede continuarse: los proyectos se conectan por **GitHub**.
 
 ## Modelo de datos
 
-Existe hoy (F0): `usuarios`, `sesiones`, `auditoria`.
+Existe hoy (F0–F1): `usuarios`, `sesiones`, `auditoria`, `proveedores` (clave cifrada, modelos disponibles),
+`agentes` (rol, instrucciones, proveedor, modelo, herramientas, límites), `proyectos` (repo, rama, token cifrado,
+validaciones, límites, avisos) y `proyecto_agentes`. Todos los recursos pertenecen a un usuario; otro usuario
+recibe 404.
 
 Planeado:
 
-- `proyectos` (repo, rama base, validaciones configuradas, límites).
-- `credenciales` (cifradas; tokens de GitHub y claves de proveedor).
-- `proveedores` (tipo: anthropic, openai-compatible, etc.; URL base; clave en la bóveda).
-- `agentes` (nombre, rol, instrucciones, proveedor, modelo, herramientas permitidas, límites de tokens/costo/tiempo, permisos).
-- `proyecto_agentes` (habilitación por proyecto).
 - `tareas`, `ejecuciones`, `pasos` (cada llamada a herramienta o modelo).
 - `propuestas`, `revisiones`, `decisiones` (colaboración y registro de quién decidió qué).
 - `conjuntos_cambios` (diff, rama, commit), `aprobaciones`, `validaciones` (comando, resultado real, salida).
@@ -56,8 +54,11 @@ Planeado:
 | POST | `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout` | ✅ |
 | GET | `/api/auth/me`, `/api/auth/sesiones` | ✅ |
 | DELETE | `/api/auth/sesiones/:id` | ✅ |
-| GET/POST | `/api/proyectos`, `/api/proyectos/:id/conectar` | F1 |
-| GET/POST/PATCH | `/api/proveedores`, `/api/agentes` | F1 |
+| GET/POST/PATCH/DELETE | `/api/proveedores`, `/api/proveedores/:id` · POST `/api/proveedores/:id/probar` | ✅ |
+| GET/POST/PATCH/DELETE | `/api/agentes`, `/api/agentes/:id` | ✅ |
+| GET/POST/PATCH/DELETE | `/api/proyectos`, `/api/proyectos/:id` · GET `/api/proyectos/:id/estado` | ✅ |
+| PUT | `/api/proyectos/:id/agentes/:agenteId` (habilitar/deshabilitar) | ✅ |
+| GET | `/api/auditoria`, `/api/resumen`, `/api/catalogo` | ✅ |
 | POST | `/api/proyectos/:id/continuar` | F2 |
 | POST | `/api/tareas/:id/pausar`, `/reanudar`, `/cancelar` | F2 |
 | GET | `/api/tareas/:id/diff` | F4 |
@@ -83,7 +84,9 @@ Los tipos de evento de tiempo real están en `packages/shared/src/eventos.ts`.
 - **Políticas fuera del modelo:** el orquestador decide qué se permite, no el LLM. El contenido de los repos es dato no confiable y nunca puede cambiar políticas.
 - **Aprobación obligatoria** para borrar, `push --force`, desplegar, publicar, usar secretos, acceder a la red o ejecutar comandos fuera de la lista permitida.
 - **Aislamiento:** contenedor sin root y sin red por defecto, con límites de CPU, memoria y tiempo. Solo se accede al worktree del proyecto; se bloquean rutas absolutas y escapes con `..` o symlinks.
-- **Claves:** nunca llegan a los clientes; se cifran con AES-256-GCM y la clave maestra se toma del entorno (KMS en producción).
+- **Claves:** nunca llegan a los clientes; se cifran con AES-256-GCM ligadas a su registro y la clave maestra se toma del entorno (KMS en producción).
+- **URLs de proveedores:** HTTPS obligatorio (HTTP solo para localhost), sin IPs privadas ni credenciales en la URL, sin seguir redirecciones. Limitación conocida: un dominio público que resuelva a una IP privada no se detecta.
+- **Herramientas de agentes:** leer, buscar, escribir en su rama, ejecutar validaciones configuradas y commits. Push, despliegues, red y secretos no son herramientas: requieren aprobación.
 - **Sesiones:** ver README.
 
 ## Riesgos

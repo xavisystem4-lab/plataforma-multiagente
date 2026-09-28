@@ -311,15 +311,25 @@
   .nav-item:disabled {
     display: none;
   }
+  .lateral {
+    scrollbar-width: none;
+  }
   .nav-item {
     flex-direction: column;
     height: auto;
-    padding: 6px 12px;
+    padding: 6px 2px;
     gap: 2px;
-    font-size: 11px;
+    font-size: 10.5px;
     width: auto;
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     justify-content: center;
+    white-space: nowrap;
+  }
+  .nav-item span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .nav-item.activo::before {
     display: none;

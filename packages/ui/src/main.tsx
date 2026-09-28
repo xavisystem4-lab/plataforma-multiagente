@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles/tema.css';
 import './styles/app.css';
+import './styles/componentes.css';
 
 createRoot(document.getElementById('raiz')!).render(
   <StrictMode>

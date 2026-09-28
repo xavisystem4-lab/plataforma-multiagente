@@ -122,9 +122,9 @@ function crearVentana() {
     // Modo de verificación (solo desarrollo): opcionalmente inicia sesión y navega,
     // luego guarda una captura de la ventana y cierra.
     ventana.webContents.once('did-finish-load', () => {
-      const { CAPTURA_EMAIL: email, CAPTURA_PASSWORD: password, CAPTURA_PAGINA: pagina } = process.env;
+      const { CAPTURA_EMAIL: email, CAPTURA_PASSWORD: password, CAPTURA_PAGINA: pagina, CAPTURA_CLIC: clic } = process.env;
       if (email && password) {
-        setTimeout(() => void ventana.webContents.executeJavaScript(guionLogin(email, password, pagina)), 800);
+        setTimeout(() => void ventana.webContents.executeJavaScript(guionLogin(email, password, pagina, clic)), 800);
       }
       setTimeout(async () => {
         const imagen = await ventana.webContents.capturePage();
@@ -140,7 +140,7 @@ function crearVentana() {
 }
 
 /** Llena el formulario como lo haría una persona (React necesita el evento "input"). */
-function guionLogin(email, password, pagina) {
+function guionLogin(email, password, pagina, clic) {
   return `(async () => {
     const escribir = (id, valor) => {
       const el = document.getElementById(id);
@@ -158,6 +158,11 @@ function guionLogin(email, password, pagina) {
     if (pagina) {
       await new Promise((r) => setTimeout(r, 1500));
       [...document.querySelectorAll('.nav-item')].find((b) => b.textContent.trim() === pagina)?.click();
+    }
+    const clic = ${JSON.stringify(clic ?? '')};
+    if (clic) {
+      await new Promise((r) => setTimeout(r, 1200));
+      [...document.querySelectorAll('.contenido button')].find((b) => b.textContent.includes(clic))?.click();
     }
   })()`;
 }

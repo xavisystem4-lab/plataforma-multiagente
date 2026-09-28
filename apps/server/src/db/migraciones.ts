@@ -54,4 +54,72 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
         BEGIN SELECT RAISE(ABORT, 'La auditoría no se puede borrar'); END;
     `,
   },
+  {
+    version: 2,
+    nombre: 'proveedores_agentes_proyectos',
+    sql: `
+      -- Claves API cifradas con la bóveda (contexto "proveedor:<id>"). clave_final = últimos 4 caracteres.
+      CREATE TABLE proveedores (
+        id TEXT PRIMARY KEY,
+        usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        nombre TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('anthropic','openai','openai_compatible')),
+        url_base TEXT,
+        clave_cifrada TEXT,
+        clave_final TEXT,
+        prueba_ok INTEGER,
+        prueba_fecha TEXT,
+        prueba_mensaje TEXT,
+        modelos_disponibles TEXT NOT NULL DEFAULT '[]',
+        creado_en TEXT NOT NULL,
+        actualizado_en TEXT NOT NULL,
+        UNIQUE (usuario_id, nombre)
+      );
+
+      CREATE TABLE agentes (
+        id TEXT PRIMARY KEY,
+        usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        nombre TEXT NOT NULL,
+        rol TEXT NOT NULL,
+        instrucciones TEXT NOT NULL DEFAULT '',
+        -- RESTRICT: no se puede borrar un proveedor que usan agentes.
+        proveedor_id TEXT NOT NULL REFERENCES proveedores(id) ON DELETE RESTRICT,
+        modelo TEXT NOT NULL,
+        herramientas TEXT NOT NULL,
+        limites TEXT NOT NULL,
+        activo INTEGER NOT NULL DEFAULT 1,
+        creado_en TEXT NOT NULL,
+        actualizado_en TEXT NOT NULL,
+        UNIQUE (usuario_id, nombre)
+      );
+
+      -- Token de GitHub cifrado (contexto "proyecto:<id>:github").
+      CREATE TABLE proyectos (
+        id TEXT PRIMARY KEY,
+        usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        nombre TEXT NOT NULL,
+        repositorio TEXT NOT NULL,
+        rama_base TEXT NOT NULL,
+        privado INTEGER NOT NULL,
+        url_repo TEXT NOT NULL,
+        token_cifrado TEXT NOT NULL,
+        token_final TEXT NOT NULL,
+        validaciones TEXT NOT NULL DEFAULT '[]',
+        limites TEXT NOT NULL,
+        avisos TEXT NOT NULL DEFAULT '[]',
+        creado_en TEXT NOT NULL,
+        actualizado_en TEXT NOT NULL,
+        UNIQUE (usuario_id, repositorio)
+      );
+
+      CREATE TABLE proyecto_agentes (
+        proyecto_id TEXT NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+        agente_id TEXT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+        habilitado_en TEXT NOT NULL,
+        PRIMARY KEY (proyecto_id, agente_id)
+      );
+
+      CREATE INDEX idx_auditoria_usuario ON auditoria(usuario_id, id);
+    `,
+  },
 ];

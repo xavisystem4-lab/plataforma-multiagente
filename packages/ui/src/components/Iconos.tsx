@@ -35,7 +35,13 @@ export const IconoAgentes = (p: P) => (
     <path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5" />
   </svg>
 );
-export const IconoTareas = (p: P) => (
+export const IconoModelos = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="6" y="6" width="12" height="12" rx="2" />
+    <path d="M10 10h4v4h-4zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+  </svg>
+);
+export const IconoTareas =(p: P) => (
   <svg {...base(p)}>
     <path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" />
   </svg>

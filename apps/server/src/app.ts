@@ -3,23 +3,34 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { ErrorApi } from '@softgala/shared';
 import { ZodError } from 'zod';
-import { rutasAuth } from './auth/rutas';
+import { crearAutenticador, rutasAuth } from './auth/rutas';
 import { ServicioAuth } from './auth/servicio';
 import type { Config } from './config';
 import type { Db } from './db';
 import { ErrorApp } from './errores';
+import { ClienteGitHub } from './externo/github';
+import { crearFabricaAdaptadores } from './modelos/adaptadores';
+import { rutasRecursos, type Servicios } from './rutas/recursos';
+import { Boveda } from './security/boveda';
+import { ServicioAgentes } from './servicios/agentes';
+import { ServicioConsultas } from './servicios/consultas';
+import type { Contexto } from './servicios/contexto';
+import { ServicioProveedores } from './servicios/proveedores';
+import { ServicioProyectos } from './servicios/proyectos';
 
 export interface Dependencias {
   config: Config;
   db: Db;
   /** Reloj inyectable para pruebas. */
   ahora?: () => Date;
+  /** fetch para llamadas salientes (GitHub, proveedores); inyectable para pruebas. */
+  fetchExterno?: typeof fetch;
   registrarLogs?: boolean;
 }
 
 const cuerpoError = (codigo: string, mensaje: string): ErrorApi => ({ error: { codigo, mensaje } });
 
-export async function construirApp({ config, db, ahora, registrarLogs = true }: Dependencias): Promise<FastifyInstance> {
+export async function construirApp({ config, db, ahora, fetchExterno = fetch, registrarLogs = true }: Dependencias): Promise<FastifyInstance> {
   const app = Fastify({
     logger: registrarLogs
       ? {
@@ -74,9 +85,31 @@ export async function construirApp({ config, db, ahora, registrarLogs = true }: 
 
   app.setNotFoundHandler((_req, rep) => rep.code(404).send(cuerpoError('NO_ENCONTRADO', 'Ruta no encontrada')));
 
-  const auth = new ServicioAuth(db, config, ahora);
-  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.1.0' }));
-  rutasAuth(app, auth, config);
+  const reloj = ahora ?? (() => new Date());
+  const auth = new ServicioAuth(db, config, reloj);
+  const autenticar = crearAutenticador(config, auth);
+
+  const ctx: Contexto = {
+    db,
+    config,
+    boveda: new Boveda(config.claveMaestra),
+    github: new ClienteGitHub(fetchExterno, config.githubApi),
+    adaptadores: crearFabricaAdaptadores(fetchExterno),
+    ahora: reloj,
+    log: app.log,
+  };
+  const proveedores = new ServicioProveedores(ctx);
+  const agentes = new ServicioAgentes(ctx, proveedores);
+  const servicios: Servicios = {
+    proveedores,
+    agentes,
+    proyectos: new ServicioProyectos(ctx, agentes),
+    consultas: new ServicioConsultas(ctx),
+  };
+
+  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.2.0' }));
+  rutasAuth(app, auth, autenticar);
+  rutasRecursos(app, servicios, autenticar);
 
   return app;
 }

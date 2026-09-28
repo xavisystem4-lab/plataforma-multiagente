@@ -5,6 +5,7 @@ import {
   IconoAprobar,
   IconoAuditoria,
   IconoCandado,
+  IconoModelos,
   IconoPanel,
   IconoProyecto,
   IconoSalir,
@@ -12,7 +13,7 @@ import {
 } from './Iconos';
 import { Logo } from './Logo';
 
-export type Pagina = 'panel' | 'seguridad';
+export type Pagina = 'panel' | 'proyectos' | 'agentes' | 'modelos' | 'auditoria' | 'seguridad';
 
 interface ItemNav {
   id: Pagina | null;
@@ -24,13 +25,14 @@ interface ItemNav {
 
 const PRINCIPAL: ItemNav[] = [
   { id: 'panel', texto: 'Panel', Icono: IconoPanel },
-  { id: null, texto: 'Proyectos', Icono: IconoProyecto, fase: 'F1' },
-  { id: null, texto: 'Agentes', Icono: IconoAgentes, fase: 'F1' },
+  { id: 'proyectos', texto: 'Proyectos', Icono: IconoProyecto },
+  { id: 'agentes', texto: 'Agentes', Icono: IconoAgentes },
   { id: null, texto: 'Tareas', Icono: IconoTareas, fase: 'F2' },
   { id: null, texto: 'Aprobaciones', Icono: IconoAprobar, fase: 'F4' },
 ];
 const ADMINISTRACION: ItemNav[] = [
-  { id: null, texto: 'Auditoría', Icono: IconoAuditoria, fase: 'F1' },
+  { id: 'modelos', texto: 'Modelos IA', Icono: IconoModelos },
+  { id: 'auditoria', texto: 'Auditoría', Icono: IconoAuditoria },
   { id: 'seguridad', texto: 'Seguridad', Icono: IconoCandado },
 ];
 

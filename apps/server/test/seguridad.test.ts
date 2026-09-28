@@ -75,6 +75,15 @@ describe('configuración', () => {
     expect(() => cargarConfig({})).toThrow(/npm run setup/);
   });
 
+  it('exige HTTPS para la API de GitHub salvo en localhost', () => {
+    const base = { JWT_SECRET: 'x'.repeat(40), MASTER_KEY: randomBytes(32).toString('base64') };
+    expect(() => cargarConfig({ ...base, GITHUB_API_URL: 'http://github.empresa.com/api/v3' })).toThrow(/HTTPS/);
+    expect(cargarConfig({ ...base, GITHUB_API_URL: 'https://github.empresa.com/api/v3/' }).githubApi).toBe(
+      'https://github.empresa.com/api/v3',
+    );
+    expect(cargarConfig({ ...base, GITHUB_API_URL: 'http://localhost:4010' }).githubApi).toBe('http://localhost:4010');
+  });
+
   it('rechaza una clave maestra de tamaño incorrecto', () => {
     expect(() =>
       cargarConfig({ JWT_SECRET: 'x'.repeat(40), MASTER_KEY: randomBytes(16).toString('base64') }),

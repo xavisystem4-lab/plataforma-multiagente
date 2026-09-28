@@ -1,5 +1,24 @@
-import type { ErrorApi, RespuestaLogin, SesionActiva, UsuarioPublico } from '@softgala/shared';
+import type {
+  AgenteEntrada,
+  AgentePublico,
+  ErrorApi,
+  EstadoRepositorio,
+  PaginaAuditoria,
+  ProveedorEdicion,
+  ProveedorNuevo,
+  ProveedorPublico,
+  ProyectoEdicion,
+  ProyectoNuevo,
+  ProyectoPublico,
+  RespuestaLogin,
+  ResultadoPrueba,
+  Resumen,
+  SesionActiva,
+  UsuarioPublico,
+} from '@softgala/shared';
 import { nombreDispositivo, type Almacen } from './plataforma';
+
+const enc = encodeURIComponent;
 
 export const SERVIDOR_PREDETERMINADO = 'http://127.0.0.1:4000';
 const CLAVE_REFRESH = 'refreshToken';
@@ -85,8 +104,42 @@ export class ClienteApi {
   }
 
   revocarSesion(id: string): Promise<void> {
-    return this.solicitud('DELETE', `/api/auth/sesiones/${encodeURIComponent(id)}`);
+    return this.solicitud('DELETE', `/api/auth/sesiones/${enc(id)}`);
   }
+
+  // ---- Recursos (F1) ----
+  resumen = () => this.solicitud<Resumen>('GET', '/api/resumen');
+
+  proveedores = () => this.solicitud<ProveedorPublico[]>('GET', '/api/proveedores');
+  crearProveedor = (d: ProveedorNuevo) => this.solicitud<ProveedorPublico>('POST', '/api/proveedores', d);
+  editarProveedor = (id: string, d: ProveedorEdicion) =>
+    this.solicitud<ProveedorPublico>('PATCH', `/api/proveedores/${enc(id)}`, d);
+  eliminarProveedor = (id: string) => this.solicitud<void>('DELETE', `/api/proveedores/${enc(id)}`);
+  probarProveedor = (id: string) => this.solicitud<ResultadoPrueba>('POST', `/api/proveedores/${enc(id)}/probar`);
+
+  agentes = () => this.solicitud<AgentePublico[]>('GET', '/api/agentes');
+  crearAgente = (d: AgenteEntrada) => this.solicitud<AgentePublico>('POST', '/api/agentes', d);
+  editarAgente = (id: string, d: Partial<AgenteEntrada>) =>
+    this.solicitud<AgentePublico>('PATCH', `/api/agentes/${enc(id)}`, d);
+  eliminarAgente = (id: string) => this.solicitud<void>('DELETE', `/api/agentes/${enc(id)}`);
+
+  proyectos = () => this.solicitud<ProyectoPublico[]>('GET', '/api/proyectos');
+  proyecto = (id: string) => this.solicitud<ProyectoPublico>('GET', `/api/proyectos/${enc(id)}`);
+  crearProyecto = (d: ProyectoNuevo) => this.solicitud<ProyectoPublico>('POST', '/api/proyectos', d);
+  editarProyecto = (id: string, d: ProyectoEdicion) =>
+    this.solicitud<ProyectoPublico>('PATCH', `/api/proyectos/${enc(id)}`, d);
+  eliminarProyecto = (id: string) => this.solicitud<void>('DELETE', `/api/proyectos/${enc(id)}`);
+  estadoProyecto = (id: string) => this.solicitud<EstadoRepositorio>('GET', `/api/proyectos/${enc(id)}/estado`);
+  habilitarAgente = (proyectoId: string, agenteId: string, habilitado: boolean) =>
+    this.solicitud<ProyectoPublico>('PUT', `/api/proyectos/${enc(proyectoId)}/agentes/${enc(agenteId)}`, { habilitado });
+
+  auditoria = (filtro: { accion?: string; antesDe?: number; limite?: number }) => {
+    const q = new URLSearchParams();
+    if (filtro.accion) q.set('accion', filtro.accion);
+    if (filtro.antesDe) q.set('antesDe', String(filtro.antesDe));
+    if (filtro.limite) q.set('limite', String(filtro.limite));
+    return this.solicitud<PaginaAuditoria>('GET', `/api/auditoria?${q}`);
+  };
 
   /** Petición autenticada; si el token de acceso expiró, lo renueva una vez y reintenta. */
   async solicitud<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {

@@ -11,8 +11,8 @@ así que el trabajo continúa aunque cierres la laptop.
 | Fase | Contenido | Estado |
 |---|---|---|
 | F0 | Monorepo, backend con login seguro, app Windows (Electron) con tema SoftGala | ✅ Completada |
-| F1 | Proyectos de GitHub, alta de agentes (multi-proveedor), bóveda de claves, auditoría visible | Siguiente |
-| F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | Pendiente |
+| F1 | Proyectos de GitHub, alta de agentes (multi-proveedor), bóveda de claves, auditoría visible | ✅ Completada |
+| F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | Siguiente |
 | F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | Pendiente |
 | F4 | Diff, aprobación, reversión | Pendiente |
 | F5 | Instalador de Windows y APK de Android (Capacitor) | Pendiente |
@@ -23,7 +23,7 @@ El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 ## Estructura
 
 ```
-apps/server      API Fastify + TypeScript (auth, y en fases siguientes orquestador y runner)
+apps/server      API Fastify + TypeScript: auth, proveedores, agentes, proyectos, auditoría
 apps/desktop     App de Windows (Electron): ventana, almacén cifrado con DPAPI
 apps/mobile      App Android (Capacitor) — fase F5
 packages/ui      Interfaz React compartida por Windows y Android
@@ -56,6 +56,19 @@ npm run dev:desktop
 ```
 
 No existe registro público: los usuarios se crean desde la terminal del servidor. El primero es administrador.
+
+## Uso (F1)
+
+1. **Modelos IA**: agrega un proveedor (Anthropic, OpenAI o compatible: Ollama, OpenRouter…) y pulsa
+   «Probar conexión» para verificar la clave y obtener la lista real de modelos.
+2. **Agentes**: crea agentes con rol, instrucciones, modelo, herramientas autorizadas y límites.
+3. **Proyectos**: conecta un repositorio de GitHub con un token *fine-grained* limitado a ese repositorio
+   (permisos *Contents: Read and write* y *Metadata: Read*). Se verifican el acceso y la rama antes de guardar.
+   En el detalle del proyecto habilitas agentes y defines las validaciones (tests, lint, build).
+4. **Auditoría**: registro de todas las acciones (el administrador ve las de todos los usuarios).
+
+Variables opcionales en `.env`: `MAX_AGENTES_POR_USUARIO`, `MAX_PROYECTOS_POR_USUARIO` y
+`GITHUB_API_URL` (para GitHub Enterprise Server).
 
 ## Pruebas
 

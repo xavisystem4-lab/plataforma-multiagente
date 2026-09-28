@@ -13,6 +13,15 @@ const esquemaConfig = z.object({
   CORS_ORIGINS: z.string().default(''),
   // Solo "true" si el servidor está detrás de un proxy propio (Caddy); si no, la IP podría falsificarse.
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
+  // Cuántos agentes y proyectos puede registrar cada usuario (ajústalo a tus recursos).
+  MAX_AGENTES_POR_USUARIO: z.coerce.number().int().min(1).max(1000).default(50),
+  MAX_PROYECTOS_POR_USUARIO: z.coerce.number().int().min(1).max(1000).default(100),
+  // API de GitHub. Para GitHub Enterprise Server: https://<host>/api/v3
+  GITHUB_API_URL: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(u), 'GITHUB_API_URL debe usar HTTPS')
+    .default('https://api.github.com'),
 });
 
 export interface Config {
@@ -32,6 +41,9 @@ export interface Config {
   maxIntentosLogin: number;
   /** Minutos que dura el bloqueo. */
   minutosBloqueo: number;
+  maxAgentesPorUsuario: number;
+  maxProyectosPorUsuario: number;
+  githubApi: string;
 }
 
 export class ErrorConfig extends Error {}
@@ -58,5 +70,8 @@ export function cargarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     duracionRefresh: 30 * 24 * 60 * 60,
     maxIntentosLogin: 5,
     minutosBloqueo: 15,
+    maxAgentesPorUsuario: e.MAX_AGENTES_POR_USUARIO,
+    maxProyectosPorUsuario: e.MAX_PROYECTOS_POR_USUARIO,
+    githubApi: e.GITHUB_API_URL.replace(/\/+$/, ''),
   };
 }
