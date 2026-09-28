@@ -1,0 +1,294 @@
+/* Tema SoftGala — azul marino, grises y blancos, inspirado en Fluent (Windows 11). */
+:root {
+  --marino-950: #071426;
+  --marino-900: #0b1f3a;
+  --marino-800: #13294b;
+  --marino-700: #1d3a66;
+  --marino-600: #2a4f86;
+  --marino-500: #3a66a8;
+  --marino-100: #e6edf7;
+  --marino-50: #f2f6fb;
+
+  --gris-900: #1c2533;
+  --gris-700: #3d4a5c;
+  --gris-600: #5b6b82;
+  --gris-400: #9aa6b8;
+  --gris-300: #c9d1dc;
+  --gris-200: #e3e8ef;
+  --gris-100: #eef1f5;
+  --gris-50: #f6f8fa;
+  --blanco: #ffffff;
+
+  --exito: #1f7a4d;
+  --exito-fondo: #e7f5ee;
+  --error: #b42318;
+  --error-fondo: #fdecea;
+  --aviso: #8a5a00;
+  --aviso-fondo: #fff5e0;
+
+  --fondo: var(--gris-50);
+  --superficie: var(--blanco);
+  --texto: var(--gris-900);
+  --texto-suave: var(--gris-600);
+  --borde: var(--gris-200);
+  --acento: var(--marino-800);
+  --foco: 0 0 0 3px rgb(58 102 168 / 0.35);
+
+  --radio-s: 6px;
+  --radio: 10px;
+  --radio-l: 14px;
+  --sombra-1: 0 1px 2px rgb(11 31 58 / 0.06), 0 1px 3px rgb(11 31 58 / 0.08);
+  --sombra-2: 0 8px 24px rgb(11 31 58 / 0.1), 0 2px 6px rgb(11 31 58 / 0.06);
+  --altura-barra: 40px;
+
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--texto);
+  background: var(--fondo);
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--fondo);
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, Roboto, sans-serif;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--foco);
+}
+
+/* ---------- Barra de título (zona arrastrable en Windows) ---------- */
+.barra-titulo {
+  height: var(--altura-barra);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: var(--marino-950);
+  color: var(--gris-200);
+  font-size: 12px;
+  -webkit-app-region: drag;
+  user-select: none;
+  flex-shrink: 0;
+}
+.barra-titulo.con-controles {
+  /* Espacio para los botones minimizar/maximizar/cerrar nativos de Windows. */
+  padding-right: 150px;
+}
+.barra-titulo strong {
+  color: var(--blanco);
+  font-weight: 600;
+}
+
+/* ---------- Botones y campos ---------- */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radio-s);
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
+}
+.boton:hover:not(:disabled) {
+  background: var(--gris-100);
+}
+.boton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.boton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.boton-primario {
+  background: var(--marino-800);
+  border-color: var(--marino-800);
+  color: var(--blanco);
+}
+.boton-primario:hover:not(:disabled) {
+  background: var(--marino-700);
+}
+.boton-grande {
+  height: 44px;
+  font-size: 15px;
+  padding: 0 22px;
+}
+.boton-texto {
+  border: none;
+  background: none;
+  color: var(--marino-600);
+  padding: 0;
+  height: auto;
+  font-weight: 600;
+}
+.boton-texto:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+.boton-peligro {
+  color: var(--error);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.campo label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--gris-700);
+}
+.entrada {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radio-s);
+  border: 1px solid var(--gris-300);
+  border-bottom-color: var(--gris-400);
+  background: var(--superficie);
+  transition: border-color 0.12s, box-shadow 0.12s;
+  width: 100%;
+}
+.entrada:hover {
+  border-color: var(--gris-400);
+}
+.entrada:focus {
+  outline: none;
+  border-color: var(--marino-500);
+  border-bottom: 2px solid var(--marino-700);
+}
+.entrada-con-boton {
+  position: relative;
+}
+.entrada-con-boton .entrada {
+  padding-right: 44px;
+}
+.entrada-con-boton button {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  height: 32px;
+  width: 36px;
+  border: none;
+  background: none;
+  border-radius: var(--radio-s);
+  cursor: pointer;
+  color: var(--gris-600);
+  display: grid;
+  place-items: center;
+}
+.entrada-con-boton button:hover {
+  background: var(--gris-100);
+}
+
+.alerta {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--radio-s);
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.alerta-error {
+  background: var(--error-fondo);
+  color: var(--error);
+  border-color: rgb(180 35 24 / 0.2);
+}
+.alerta-aviso {
+  background: var(--aviso-fondo);
+  color: var(--aviso);
+  border-color: rgb(138 90 0 / 0.2);
+}
+.alerta-info {
+  background: var(--marino-50);
+  color: var(--marino-700);
+  border-color: var(--marino-100);
+}
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--gris-100);
+  color: var(--gris-600);
+  white-space: nowrap;
+}
+.etiqueta-exito {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.etiqueta-marino {
+  background: var(--marino-100);
+  color: var(--marino-700);
+}
+
+.girando {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(255 255 255 / 0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.credito {
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--gris-700);
+  letter-spacing: 0.01em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

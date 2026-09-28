@@ -1,0 +1,22 @@
+{
+  "name": "plataforma-multiagente",
+  "private": true,
+  "description": "Plataforma multiagente para continuar proyectos desde Windows y Android — Desarrollado por SoftGala",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "node scripts/generar-env.mjs",
+    "dev:server": "npm run dev -w @softgala/server",
+    "dev:ui": "npm run dev -w @softgala/ui",
+    "dev:desktop": "npm run dev -w @softgala/desktop",
+    "usuario:crear": "npm run usuario:crear -w @softgala/server --",
+    "build": "npm run build -w @softgala/ui && npm run build -w @softgala/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

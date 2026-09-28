@@ -1,0 +1,15 @@
+{
+  "name": "@softgala/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma Multiagente para Windows — Desarrollado por SoftGala",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env ELECTRON_DEV_URL=http://localhost:5173 electron ."
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^44.4.5"
+  }
+}
