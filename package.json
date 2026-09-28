@@ -12,6 +12,8 @@
     "dev:ui": "npm run dev -w @softgala/ui",
     "dev:desktop": "npm run dev -w @softgala/desktop",
     "usuario:crear": "npm run usuario:crear -w @softgala/server --",
+    "respaldo:crear": "npm run respaldo:crear -w @softgala/server --",
+    "respaldo:restaurar": "npm run respaldo:restaurar -w @softgala/server --",
     "build": "npm run build -w @softgala/ui && npm run build -w @softgala/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

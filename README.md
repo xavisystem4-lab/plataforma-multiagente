@@ -18,8 +18,7 @@ así que el trabajo continúa aunque cierres la laptop.
 | F5 | Instalador de Windows y APK de Android (Capacitor), modo claro/oscuro | ✅ Completada |
 | F5+ | Ventanas de proyecto: fijados, renombrar, color y barra de avance | ✅ Completada |
 | F6 | Instrucciones por voz (transcripción con OpenAI) | ✅ Completada |
-| F7 | Control asistido del equipo (el agente propone, tú apruebas cada acción) | Siguiente |
-| F8 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
+| F7 | Servidor 24/7 en PC propia (Windows) publicado con Tailscale, respaldos y restauración | ✅ Completada |
 
 El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -193,6 +192,28 @@ auditoría registra solo metadatos (tamaño, modelo, número de caracteres), nun
 Permisos: en Windows la app solo concede el micrófono (nunca la cámara) y solo a su propia interfaz; si no
 funciona, revisa *Configuración → Privacidad → Micrófono → Permitir que las apps de escritorio accedan*.
 En Android se pide el permiso de micrófono la primera vez que pulsas el botón.
+
+## Servidor 24/7 en tu PC (F7)
+
+Para que los agentes trabajen aunque cierres la laptop o el celular, el servidor corre en una PC con
+Windows que dejas encendida y se publica **solo para tus dispositivos** con **Tailscale** (red privada).
+Guía completa paso a paso: **[servidor/README.md](servidor/README.md)**.
+
+Resumen (en PowerShell, en la carpeta del proyecto):
+
+```powershell
+npm install
+node servidorpreparar-servidor.mjs          # crea .env.servidor y muestra tu MASTER_KEY (guárdala)
+npm run usuario:crear -- --email tu@correo.com --nombre "Tu Nombre"
+powershell -ExecutionPolicy Bypass -File servidorpublicar-tailscale.ps1   # HTTPS en tu red privada
+node servidoriniciar.mjs                      # arranca el servidor
+powershell -ExecutionPolicy Bypass -File servidorinstalar-autoarranque.ps1  # que arranque solo
+```
+
+En la app (Windows y Android), en **Servidor**, pon la dirección `https://<tu-pc>.<tu-red>.ts.net`.
+
+**Respaldos**: automáticos cada 24 h en `datos-servidor/respaldos/`; manual con `npm run respaldo:crear`.
+**Mudarte de PC**: con un respaldo `.db` + tu MASTER_KEY, la PC nueva queda idéntica (ver la guía).
 
 ## Pruebas
 

@@ -6,6 +6,8 @@ out/
 .env.*
 !.env.example
 data/
+datos-servidor/
+respaldos/
 *.db
 *.db-wal
 *.db-shm

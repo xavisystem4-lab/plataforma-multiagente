@@ -31,6 +31,10 @@ const esquemaConfig = z.object({
   SANDBOX_MEMORIA: z.string().regex(/^\d+[kmg]$/i).default('2g'),
   SANDBOX_USUARIO: z.string().regex(/^\d+(:\d+)?$/).default('1000:1000'),
   TIMEOUT_VALIDACION_MIN: z.coerce.number().int().min(1).max(120).default(10),
+  // Respaldos automáticos de la base de datos (0 = desactivados)
+  RESPALDO_CADA_HORAS: z.coerce.number().min(0).max(24 * 30).default(24),
+  RESPALDOS_A_CONSERVAR: z.coerce.number().int().min(1).max(365).default(7),
+  RESPALDO_DIR: z.string().optional(),
 });
 
 export interface Config {
@@ -62,6 +66,7 @@ export interface Config {
     timeoutValidacionMs: number;
   };
   sandbox: { imagen: string; cpus: string; memoria: string; usuario: string };
+  respaldos: { cadaHoras: number; conservar: number; carpeta: string };
 }
 
 export class ErrorConfig extends Error {}
@@ -99,6 +104,11 @@ export function cargarConfig(env: NodeJS.ProcessEnv = process.env): Config {
       timeoutValidacionMs: e.TIMEOUT_VALIDACION_MIN * 60_000,
     },
     sandbox: { imagen: e.SANDBOX_IMAGEN, cpus: e.SANDBOX_CPUS, memoria: e.SANDBOX_MEMORIA, usuario: e.SANDBOX_USUARIO },
+    respaldos: {
+      cadaHoras: e.RESPALDO_CADA_HORAS,
+      conservar: e.RESPALDOS_A_CONSERVAR,
+      carpeta: path.resolve(e.RESPALDO_DIR ?? path.join(e.DATA_DIR, 'respaldos')),
+    },
   };
 }
 

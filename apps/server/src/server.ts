@@ -2,6 +2,7 @@ import path from 'node:path';
 import { construirApp } from './app';
 import { cargarConfig, ErrorConfig } from './config';
 import { abrirDb } from './db';
+import { programarRespaldos } from './respaldos';
 
 async function iniciar(): Promise<void> {
   const config = cargarConfig();
@@ -17,8 +18,14 @@ async function iniciar(): Promise<void> {
     app.log.warn('El servidor escucha fuera de localhost sin proxy TLS. En producción colócalo detrás de Caddy (HTTPS).');
   }
 
+  const detenerRespaldos =
+    config.respaldos.cadaHoras > 0
+      ? programarRespaldos(db, { carpeta: config.respaldos.carpeta, horas: config.respaldos.cadaHoras, conservar: config.respaldos.conservar, log: app.log })
+      : () => {};
+
   const cerrar = async (senal: string) => {
     app.log.info(`Recibida ${senal}; cerrando...`);
+    detenerRespaldos();
     await app.close();
     db.close();
     process.exit(0);
