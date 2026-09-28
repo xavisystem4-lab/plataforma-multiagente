@@ -1,0 +1,91 @@
+/* ---------- Dictado por voz ---------- */
+.texto-con-voz {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+.texto-con-voz textarea {
+  padding-right: 54px;
+}
+/* El botón queda dentro del campo, arriba a la derecha; los mensajes, debajo del campo. */
+.voz {
+  display: contents;
+}
+.boton-voz {
+  --nivel-voz: 0;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--marino-600);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.08s linear;
+}
+.boton-voz:hover:not(:disabled) {
+  background: var(--gris-100);
+  transform: scale(1.06);
+}
+.boton-voz:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+/* Grabando: rojo con un anillo que crece con el volumen de la voz. */
+.boton-voz.grabando {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow:
+    0 0 0 calc(3px + var(--nivel-voz) * 14px) rgb(220 38 38 / 0.22),
+    0 0 0 calc(6px + var(--nivel-voz) * 26px) rgb(220 38 38 / 0.08);
+}
+.boton-voz .giro {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: girar 0.7s linear infinite;
+}
+.voz-tiempo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+.voz-tiempo small {
+  color: #dc2626;
+  font-size: 12px;
+}
+.punto-rojo {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: latido-voz 1s ease-in-out infinite;
+}
+@keyframes latido-voz {
+  50% {
+    opacity: 0.3;
+  }
+}
+.voz-aviso {
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boton-voz.grabando {
+    box-shadow: 0 0 0 4px rgb(220 38 38 / 0.25);
+  }
+  .punto-rojo {
+    animation: none;
+  }
+}

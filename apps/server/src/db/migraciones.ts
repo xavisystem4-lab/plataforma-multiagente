@@ -255,4 +255,19 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
       ALTER TABLE proyectos ADD COLUMN nombre_ventana TEXT;
     `,
   },
+  {
+    version: 7,
+    nombre: 'ajustes_voz',
+    sql: `
+      -- Proveedor y modelo con que se transcriben las instrucciones por voz de cada usuario.
+      -- El audio nunca se guarda: solo se reenvía al proveedor y se descarta.
+      CREATE TABLE ajustes_voz (
+        usuario_id TEXT PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+        proveedor_id TEXT REFERENCES proveedores(id) ON DELETE SET NULL,
+        modelo TEXT NOT NULL,
+        idioma TEXT NOT NULL,
+        actualizado_en TEXT NOT NULL
+      );
+    `,
+  },
 ];

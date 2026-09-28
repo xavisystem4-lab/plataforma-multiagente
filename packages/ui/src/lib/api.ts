@@ -1,4 +1,7 @@
 import type {
+  AjustesVoz,
+  AjustesVozEdicion,
+  Transcripcion,
   AgenteEntrada,
   AgentePublico,
   ErrorApi,
@@ -192,6 +195,11 @@ export class ClienteApi {
     return `${this.servidor.replace(/^http/, 'ws')}/api/ws`;
   }
 
+  ajustesVoz = () => this.solicitud<AjustesVoz & { modelosSugeridos: string[] }>('GET', '/api/voz/ajustes');
+  guardarAjustesVoz = (d: AjustesVozEdicion) => this.solicitud<AjustesVoz>('PUT', '/api/voz/ajustes', d);
+  /** Envía el audio grabado; el servidor lo transcribe y lo descarta. */
+  transcribir = (audio: Blob) => this.solicitud<Transcripcion>('POST', '/api/voz/transcribir', audio);
+
   auditoria = (filtro: { accion?: string; antesDe?: number; limite?: number }) => {
     const q = new URLSearchParams();
     if (filtro.accion) q.set('accion', filtro.accion);
@@ -260,14 +268,17 @@ export class ClienteApi {
   private async enviar<T>(metodo: string, ruta: string, cuerpo?: unknown, token?: string): Promise<T> {
     let resp: Response;
     try {
+      // Un Blob (audio) viaja tal cual con su tipo; el resto, como JSON.
+      const binario = cuerpo instanceof Blob;
       resp = await fetch(`${this.servidor}${ruta}`, {
         method: metodo,
         headers: {
-          ...(cuerpo !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(binario ? { 'Content-Type': cuerpo.type } : cuerpo !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
-        signal: AbortSignal.timeout(15_000),
+        body: binario ? cuerpo : cuerpo !== undefined ? JSON.stringify(cuerpo) : undefined,
+        // La transcripción depende del proveedor y puede tardar más que una petición normal.
+        signal: AbortSignal.timeout(binario ? 100_000 : 15_000),
       });
     } catch {
       throw new ErrorCliente('SIN_CONEXION', `No se pudo conectar con el servidor (${this.servidor}).`);

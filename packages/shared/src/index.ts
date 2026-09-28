@@ -3,6 +3,7 @@ export * from './eventos';
 export * from './recursos';
 export * from './tareas';
 export * from './revision';
+export * from './voz';
 
 export const MARCA = {
   producto: 'Plataforma Multiagente',

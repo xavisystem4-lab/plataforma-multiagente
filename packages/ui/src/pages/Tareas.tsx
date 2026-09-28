@@ -11,6 +11,7 @@ import { mensajeError, useDatos } from '../lib/datos';
 import { useSesion } from '../lib/sesion';
 import { useEventos, useTiempoReal } from '../lib/tiempoReal';
 import '../styles/tareas.css';
+import { agregarDictado, TextoConVoz } from '../components/BotonVoz';
 
 const CLASE_ESTADO: Record<EstadoTarea, string> = {
   en_cola: 'etiqueta',
@@ -372,7 +373,9 @@ function Pregunta({ tarea, alResponder }: { tarea: TareaPublica; alResponder(t: 
       <strong>El agente necesita tu intervención</strong>
       <p className="texto-agente">{tarea.pregunta}</p>
       {error && <Alerta>{error}</Alerta>}
-      <textarea className="entrada" value={respuesta} onChange={(e) => setRespuesta(e.target.value)} placeholder="Escribe tu respuesta o decisión…" aria-label="Respuesta" />
+      <TextoConVoz alTexto={(t) => setRespuesta((act) => agregarDictado(act, t))} deshabilitado={enviando}>
+        <textarea className="entrada" value={respuesta} onChange={(e) => setRespuesta(e.target.value)} placeholder="Escribe o dicta tu respuesta o decisión…" aria-label="Respuesta" />
+      </TextoConVoz>
       <div>
         <BotonCarga type="submit" cargando={enviando} disabled={!respuesta.trim()}>
           Responder y continuar

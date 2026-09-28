@@ -1,5 +1,6 @@
 import { INFO_PROVEEDOR, TIPOS_PROVEEDOR, type ProveedorPublico, type TipoProveedor } from '@softgala/shared';
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { invalidarAjustesVoz } from '../components/BotonVoz';
 import { Alerta, BotonCarga, Campo, Encabezado, fecha, Modal, Vacio } from '../components/Comunes';
 import { IconoModelos } from '../components/Iconos';
 import { mensajeError, useDatos } from '../lib/datos';
@@ -117,6 +118,8 @@ export function Modelos() {
         ))}
       </div>
 
+      {datos && <AjustesDeVoz proveedores={datos} />}
+
       {editando && (
         <FormularioProveedor
           proveedor={editando === 'nuevo' ? null : editando}
@@ -233,5 +236,106 @@ function FormularioProveedor({
         </Campo>
       </form>
     </Modal>
+  );
+}
+
+const IDIOMAS = [
+  ['es', 'Español'],
+  ['en', 'Inglés'],
+  ['pt', 'Portugués'],
+  ['fr', 'Francés'],
+] as const;
+
+/** Proveedor y modelo con que se transcriben las instrucciones dictadas por voz. */
+function AjustesDeVoz({ proveedores }: { proveedores: ProveedorPublico[] }) {
+  const { api } = useSesion();
+  const { datos, error, recargar } = useDatos(useCallback(() => api.ajustesVoz(), [api]));
+  const [proveedorId, setProveedorId] = useState('');
+  const [modelo, setModelo] = useState('');
+  const [idioma, setIdioma] = useState('es');
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
+  const compatibles = proveedores.filter((p) => p.tipo !== 'anthropic');
+
+  // Si se agregan o eliminan proveedores, los ajustes pueden cambiar (p. ej. quedar sin proveedor).
+  useEffect(() => {
+    void recargar();
+  }, [proveedores, recargar]);
+  useEffect(() => {
+    if (!datos) return;
+    setProveedorId(datos.proveedorId ?? '');
+    setModelo(datos.modelo);
+    setIdioma(datos.idioma);
+  }, [datos]);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setMensaje(null);
+    try {
+      await api.guardarAjustesVoz({ proveedorId: proveedorId || null, modelo: modelo.trim(), idioma });
+      invalidarAjustesVoz();
+      await recargar();
+      setMensaje({ ok: true, texto: proveedorId ? 'Listo: ya puedes dictar con el micrófono.' : 'Voz desactivada.' });
+    } catch (err) {
+      setMensaje({ ok: false, texto: mensajeError(err) });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section className="tarjeta" style={{ marginTop: 20, maxWidth: 720 }}>
+      <div className="seccion-titulo">
+        <h2>Instrucciones por voz</h2>
+        <span className={`etiqueta ${datos?.disponible ? 'etiqueta-exito' : ''}`}>{datos?.disponible ? 'Activa' : 'Sin configurar'}</span>
+      </div>
+      <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>
+        El micrófono aparece en «Continuar proyecto» y al responder a un agente. El audio se envía a tu servidor, que lo
+        transcribe con este proveedor y lo descarta; el texto se agrega al campo para que lo revises antes de enviarlo.
+      </p>
+      {error && <Alerta>{error}</Alerta>}
+      {compatibles.length === 0 ? (
+        <Alerta tipo="info">Agrega un proveedor de OpenAI (o compatible con transcripción) para usar la voz. Anthropic no ofrece transcripción.</Alerta>
+      ) : (
+        <form onSubmit={guardar} style={{ display: 'grid', gap: 12 }}>
+          <div className="fila-campos">
+            <Campo etiqueta="Proveedor" htmlFor="v-proveedor">
+              <select id="v-proveedor" className="entrada" value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+                <option value="">— Desactivada —</option>
+                {compatibles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            <Campo etiqueta="Idioma" htmlFor="v-idioma">
+              <select id="v-idioma" className="entrada" value={idioma} onChange={(e) => setIdioma(e.target.value)}>
+                {IDIOMAS.map(([id, nombre]) => (
+                  <option key={id} value={id}>
+                    {nombre}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+          </div>
+          <Campo etiqueta="Modelo de transcripción" htmlFor="v-modelo" ayuda="gpt-4o-mini-transcribe es el más económico; gpt-4o-transcribe, el más preciso.">
+            <input id="v-modelo" className="entrada mono" list="modelos-voz" value={modelo} onChange={(e) => setModelo(e.target.value)} />
+            <datalist id="modelos-voz">
+              {datos?.modelosSugeridos.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </Campo>
+          {mensaje && <Alerta tipo={mensaje.ok ? 'info' : 'error'}>{mensaje.texto}</Alerta>}
+          <div>
+            <BotonCarga type="submit" cargando={guardando} disabled={!modelo.trim()}>
+              Guardar
+            </BotonCarga>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

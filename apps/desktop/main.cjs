@@ -28,6 +28,8 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe', 'inspec
 const CAPTURA = process.env.CAPTURA && !app.isPackaged ? process.env.CAPTURA : null;
 if (CAPTURA) {
   app.setPath('userData', path.join(app.getPath('temp'), 'softgala-multiagente-captura'));
+  // Verificación del dictado sin micrófono real: Chromium genera un tono de prueba.
+  if (process.env.CAPTURA_MICROFONO_FALSO) app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
@@ -335,8 +337,27 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(ruta).toString());
   });
 
-  // La app no necesita cámara, micrófono, notificaciones del navegador, etc.
-  session.defaultSession.setPermissionRequestHandler((_wc, _permiso, responder) => responder(false));
+  // Único permiso concedido: el micrófono (sin cámara) para el dictado por voz, y solo a la propia
+  // interfaz. Cámara, notificaciones del navegador, ubicación, etc. se niegan siempre.
+  const esInterfazPropia = (url) => {
+    try {
+      // URL.origin es "null" para esquemas propios como app://, por eso se arma a mano.
+      const aOrigen = (u) => {
+        const x = new URL(u);
+        return `${x.protocol}//${x.host}`;
+      };
+      return aOrigen(url) === ORIGEN_APP || (!!URL_DESARROLLO && aOrigen(url) === aOrigen(URL_DESARROLLO));
+    } catch {
+      return false;
+    }
+  };
+  session.defaultSession.setPermissionRequestHandler((_wc, permiso, responder, detalles) => {
+    const soloAudio = Array.isArray(detalles.mediaTypes) && detalles.mediaTypes.length > 0 && detalles.mediaTypes.every((t) => t === 'audio');
+    responder(permiso === 'media' && soloAudio && esInterfazPropia(detalles.requestingUrl));
+  });
+  session.defaultSession.setPermissionCheckHandler(
+    (_wc, permiso, origen, detalles) => permiso === 'media' && detalles.mediaType !== 'video' && esInterfazPropia(origen),
+  );
 
   Menu.setApplicationMenu(null);
   let principal = crearVentanaPrincipal();

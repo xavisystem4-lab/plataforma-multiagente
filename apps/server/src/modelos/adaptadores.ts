@@ -40,13 +40,23 @@ export interface SolicitudTurno {
   senal?: AbortSignal;
 }
 
+export interface SolicitudTranscripcion {
+  modelo: string;
+  audio: Uint8Array;
+  tipo: string;
+  idioma: string;
+  senal?: AbortSignal;
+}
+
 /**
- * Interfaz común para los proveedores de modelos: listar modelos (prueba de conexión)
- * y ejecutar un turno de conversación con herramientas.
+ * Interfaz común para los proveedores de modelos: listar modelos (prueba de conexión),
+ * ejecutar un turno de conversación con herramientas y, si el proveedor lo ofrece, transcribir audio.
  */
 export interface AdaptadorModelos {
   listarModelos(): Promise<string[]>;
   turno(s: SolicitudTurno): Promise<RespuestaTurno>;
+  /** Ausente si el proveedor no tiene transcripción de voz (p. ej. Anthropic). */
+  transcribir?(s: SolicitudTranscripcion): Promise<string>;
 }
 
 export interface CredencialesProveedor {
@@ -236,16 +246,32 @@ class AdaptadorOpenAICompatible implements AdaptadorModelos {
     };
   }
 
+  /** POST /audio/transcriptions (multipart), el formato de OpenAI que también usan servidores Whisper. */
+  async transcribir(s: SolicitudTranscripcion): Promise<string> {
+    const senal = s.senal ? AbortSignal.any([s.senal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000);
+    const formulario = new FormData();
+    const extension = s.tipo.split('/')[1]?.replace('mpeg', 'mp3') ?? 'webm';
+    formulario.append('file', new Blob([new Uint8Array(s.audio)], { type: s.tipo }), `audio.${extension}`);
+    formulario.append('model', s.modelo);
+    formulario.append('language', s.idioma);
+    formulario.append('response_format', 'json');
+    const r = await this.pedir<{ text?: unknown }>('POST', '/audio/transcriptions', formulario, senal);
+    if (typeof r.text !== 'string') throw new ErrorProveedor(`${this.nombre} devolvió una transcripción inesperada.`);
+    return r.text.trim();
+  }
+
   private async pedir<T>(metodo: string, ruta: string, cuerpo: unknown, senal: AbortSignal): Promise<T> {
     let r: Response;
+    // FormData lleva su propio Content-Type (multipart con boundary); lo demás va como JSON.
+    const esFormulario = cuerpo instanceof FormData;
     try {
       r = await this.fetchFn(`${this.urlBase}${ruta}`, {
         method: metodo,
         headers: {
           ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
-          ...(cuerpo ? { 'Content-Type': 'application/json' } : {}),
+          ...(cuerpo && !esFormulario ? { 'Content-Type': 'application/json' } : {}),
         },
-        body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+        body: esFormulario ? cuerpo : cuerpo ? JSON.stringify(cuerpo) : undefined,
         signal: senal,
         redirect: 'error',
       });
@@ -256,6 +282,13 @@ class AdaptadorOpenAICompatible implements AdaptadorModelos {
     if (r.status === 401 || r.status === 403) throw new ErrorProveedor(`${this.nombre} rechazó la clave API.`);
     if (r.status === 404) throw new ErrorProveedor(`${this.nombre} no reconoce la ruta o el modelo.`);
     if (r.status === 429) throw new ErrorProveedor(`Límite de uso de ${this.nombre} alcanzado; intenta más tarde.`, true);
+    if (r.status === 400) {
+      // El detalle ayuda a corregir (modelo que no transcribe, audio vacío…); se recorta por seguridad.
+      const detalle = ((await r.json().catch(() => null)) as { error?: { message?: unknown } } | null)?.error?.message;
+      throw new ErrorProveedor(
+        `${this.nombre} rechazó la solicitud${typeof detalle === 'string' ? `: ${detalle.slice(0, 200)}` : '.'}`,
+      );
+    }
     if (!r.ok) throw new ErrorProveedor(`${this.nombre} respondió con un error (${r.status}).`, r.status >= 500);
     const datos = (await r.json().catch(() => null)) as T | null;
     if (datos === null) throw new ErrorProveedor(`${this.nombre} devolvió una respuesta inesperada.`);

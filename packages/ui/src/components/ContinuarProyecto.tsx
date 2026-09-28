@@ -4,6 +4,7 @@ import { mensajeError, useDatos } from '../lib/datos';
 import { useSesion } from '../lib/sesion';
 import { Alerta, BotonCarga, Campo, Modal } from './Comunes';
 import { IconoPlay } from './Iconos';
+import { agregarDictado, TextoConVoz } from './BotonVoz';
 
 /**
  * Diálogo de "Continuar proyecto": reanuda la tarea pausada del proyecto o inicia una nueva,
@@ -146,14 +147,16 @@ export function ContinuarProyecto({
         )}
 
         <Campo etiqueta={pendiente ? 'O empieza una tarea nueva' : 'Objetivo'} htmlFor="c-objetivo" ayuda="Describe qué se debe lograr. Sé concreto.">
-          <textarea
-            id="c-objetivo"
-            className="entrada"
-            value={objetivo}
-            onChange={(e) => setObjetivo(e.target.value)}
-            placeholder="Ej.: Agrega validación de correo al formulario de registro y sus pruebas."
-            disabled={!!ocupado}
-          />
+          <TextoConVoz alTexto={(t) => setObjetivo((act) => agregarDictado(act, t))} deshabilitado={!!ocupado}>
+            <textarea
+              id="c-objetivo"
+              className="entrada"
+              value={objetivo}
+              onChange={(e) => setObjetivo(e.target.value)}
+              placeholder="Ej.: Agrega validación de correo al formulario de registro y sus pruebas. (O díctalo con el micrófono.)"
+              disabled={!!ocupado}
+            />
+          </TextoConVoz>
         </Campo>
 
         <div className="selector-modo" role="radiogroup" aria-label="Modo de trabajo">

@@ -16,7 +16,10 @@ así que el trabajo continúa aunque cierres la laptop.
 | F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | ✅ Completada |
 | F4 | Diff, aprobación, reversión | ✅ Completada |
 | F5 | Instalador de Windows y APK de Android (Capacitor), modo claro/oscuro | ✅ Completada |
-| F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Siguiente |
+| F5+ | Ventanas de proyecto: fijados, renombrar, color y barra de avance | ✅ Completada |
+| F6 | Instrucciones por voz (transcripción con OpenAI) | ✅ Completada |
+| F7 | Control asistido del equipo (el agente propone, tú apruebas cada acción) | Siguiente |
+| F8 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
 
 El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -173,6 +176,23 @@ Selector de tema desde el login, el menú lateral y Seguridad → Apariencia: **
 Todas las ventanas comparten una sola sesión: el proceso principal de Electron renueva el token por ellas
 (el refresh token ya no es accesible desde la interfaz), así que abrir varias no dispara la detección de
 reutilización de tokens. Cerrar sesión en una ventana la cierra en todas.
+
+## Instrucciones por voz (F6)
+
+1. En **Modelos IA** agrega un proveedor **OpenAI** con tu clave (o uno compatible que ofrezca
+   `/audio/transcriptions`, como un servidor Whisper local). Anthropic no ofrece transcripción.
+2. En **Modelos IA → Instrucciones por voz** elige ese proveedor, el idioma y el modelo
+   (`gpt-4o-mini-transcribe` por defecto; `gpt-4o-transcribe` es más preciso; también `whisper-1`).
+3. Pulsa el micrófono en **Continuar proyecto** o al **responder a un agente**. Mientras grabas, el anillo
+   rojo sigue el volumen de tu voz; pulsa de nuevo para transcribir o **Esc** para cancelar (máximo 2 min).
+
+El texto dictado **solo se agrega al campo**: lo revisas y decides si lo envías. Las aprobaciones siguen
+siendo con clic. El audio viaja a tu servidor, que lo reenvía al proveedor y lo descarta (no se guarda); la
+auditoría registra solo metadatos (tamaño, modelo, número de caracteres), nunca lo dictado.
+
+Permisos: en Windows la app solo concede el micrófono (nunca la cámara) y solo a su propia interfaz; si no
+funciona, revisa *Configuración → Privacidad → Micrófono → Permitir que las apps de escritorio accedan*.
+En Android se pide el permiso de micrófono la primera vez que pulsas el botón.
 
 ## Pruebas
 

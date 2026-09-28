@@ -17,6 +17,7 @@ import { detectarSandbox, type Sandbox } from './ejecucion/sandbox';
 import { ClienteGitHub } from './externo/github';
 import { crearFabricaAdaptadores, type FabricaAdaptadores } from './modelos/adaptadores';
 import { rutasRevision } from './rutas/revision';
+import { rutasVoz } from './rutas/voz';
 import { rutasTareas, rutaTiempoReal } from './rutas/tareas';
 import { ServicioRevision } from './servicios/revision';
 import { rutasRecursos, type Servicios } from './rutas/recursos';
@@ -25,6 +26,7 @@ import { ServicioAgentes } from './servicios/agentes';
 import { ServicioConsultas } from './servicios/consultas';
 import type { Contexto } from './servicios/contexto';
 import { ServicioProveedores } from './servicios/proveedores';
+import { ServicioVoz } from './servicios/voz';
 import { ServicioProyectos } from './servicios/proyectos';
 
 export interface Dependencias {
@@ -146,11 +148,12 @@ export async function construirApp(dep: Dependencias): Promise<FastifyInstance> 
   app.decorate('orquestador', orquestador);
   app.addHook('onClose', async () => orquestador.detener());
 
-  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.5.0' }));
+  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.6.0' }));
   rutasAuth(app, auth, autenticar);
   rutasRecursos(app, servicios, autenticar, (proyectoId) => orquestador.limpiarProyecto(proyectoId));
   rutasTareas(app, orquestador, autenticar);
   rutasRevision(app, revision, autenticar);
+  rutasVoz(app, new ServicioVoz(ctx, proveedores), autenticar);
   rutaTiempoReal(app, bus, auth, config);
 
   return app;
