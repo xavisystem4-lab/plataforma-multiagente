@@ -4,7 +4,7 @@ import type {
   ErrorApi,
   EstadoRepositorio,
   EventoTiempoReal,
-  SolicitudContinuar,
+  DecisionPublica,
   TareaPublica,
   PaginaAuditoria,
   ProveedorEdicion,
@@ -19,6 +19,8 @@ import type {
   SesionActiva,
   UsuarioPublico,
 } from '@softgala/shared';
+import type { esquemaContinuar } from '@softgala/shared';
+import type { z } from 'zod';
 import { nombreDispositivo, type Almacen } from './plataforma';
 
 const enc = encodeURIComponent;
@@ -138,11 +140,12 @@ export class ClienteApi {
 
   // ---- Tareas (F2) ----
   sistema = () => this.solicitud<{ sandbox: { disponible: boolean; motivo: string | null } }>('GET', '/api/sistema');
-  continuar = (proyectoId: string, d: SolicitudContinuar) =>
+  continuar = (proyectoId: string, d: z.input<typeof esquemaContinuar>) =>
     this.solicitud<TareaPublica>('POST', `/api/proyectos/${enc(proyectoId)}/continuar`, d);
   tareas = (proyectoId?: string) =>
     this.solicitud<TareaPublica[]>('GET', `/api/tareas${proyectoId ? `?proyectoId=${enc(proyectoId)}` : ''}`);
   tarea = (id: string) => this.solicitud<TareaPublica>('GET', `/api/tareas/${enc(id)}`);
+  decisiones = (id: string) => this.solicitud<DecisionPublica[]>('GET', `/api/tareas/${enc(id)}/decisiones`);
   eventosTarea = (id: string) => this.solicitud<EventoTiempoReal[]>('GET', `/api/tareas/${enc(id)}/eventos`);
   accionTarea = (id: string, accion: 'pausar' | 'reanudar' | 'cancelar') =>
     this.solicitud<TareaPublica>('POST', `/api/tareas/${enc(id)}/${accion}`);

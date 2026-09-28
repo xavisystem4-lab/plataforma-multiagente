@@ -168,3 +168,136 @@
     gap: 2px;
   }
 }
+
+/* ---------- Modo equipo ---------- */
+.selector-modo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.selector-modo button {
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  cursor: pointer;
+}
+.selector-modo button span {
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+.selector-modo button.activo {
+  border-color: var(--marino-600);
+  background: var(--marino-50);
+  box-shadow: inset 0 0 0 1px var(--marino-600);
+}
+.selector-modo button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.opciones-columnas {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.fases-equipo {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+.fase-equipo {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  border-radius: var(--radio-s);
+  background: var(--gris-100);
+  color: var(--texto-suave);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-top: 3px solid var(--gris-300);
+}
+.fase-equipo.hecha {
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border-top-color: var(--exito);
+}
+.fase-equipo.actual {
+  background: var(--marino-100);
+  color: var(--marino-800);
+  border-top-color: var(--marino-600);
+}
+
+.subtareas {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.subtarea {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-s);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+.subtarea .cabecera-sub {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.subtarea .num {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11.5px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--gris-100);
+  color: var(--gris-700);
+}
+.aporte {
+  border-left: 3px solid var(--marino-500);
+  padding: 6px 10px;
+  background: var(--gris-50);
+  border-radius: 0 var(--radio-s) var(--radio-s) 0;
+}
+.aporte summary {
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.aporte.tipo-revision {
+  border-left-color: var(--aviso);
+}
+.aporte.tipo-decision {
+  border-left-color: var(--exito);
+}
+.evento-agent-proposal,
+.evento-agent-review {
+  border-left-color: var(--marino-600);
+}
+.evento-coordinator-decision {
+  border-left-color: var(--exito);
+  background: var(--exito-fondo);
+}
+@media (max-width: 820px) {
+  .selector-modo {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,5 @@
-import { NOMBRE_ESTADO, type EstadoTarea, type EventoTiempoReal, type ResultadoValidacion, type TareaPublica } from '@softgala/shared';
+import { NOMBRE_ESTADO, NOMBRE_FASE, type DecisionPublica, type EstadoTarea, type EventoTiempoReal, type FaseColaboracion, type ResultadoValidacion, type TareaPublica } from '@softgala/shared';
+import { FasesEquipo, PlanCoordinador, RegistroDecisiones } from '../components/Equipo';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Alerta, BotonCarga, Encabezado, fecha, Vacio } from '../components/Comunes';
 import { ContinuarProyecto } from '../components/ContinuarProyecto';
@@ -84,7 +85,10 @@ export function Tareas({ abierta, alAbrir }: { abierta: string | null; alAbrir(i
               <tbody>
                 {datos.map((t) => (
                   <tr key={t.id} onClick={() => alAbrir(t.id)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && alAbrir(t.id)}>
-                    <td className="celda-objetivo">{t.objetivo}</td>
+                    <td className="celda-objetivo">
+                      {t.modo === 'colaborativo' && <span className="etiqueta etiqueta-marino" style={{ marginRight: 6 }}>Equipo</span>}
+                      {t.objetivo}
+                    </td>
                     <td>{t.proyectoNombre}</td>
                     <td>{t.agenteNombre}</td>
                     <td>
@@ -117,14 +121,16 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
   const { conectado } = useTiempoReal();
   const [tarea, setTarea] = useState<TareaPublica | null>(null);
   const [eventos, setEventos] = useState<EventoTiempoReal[]>([]);
+  const [decisiones, setDecisiones] = useState<DecisionPublica[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [accion, setAccion] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     try {
-      const [t, ev] = await Promise.all([api.tarea(id), api.eventosTarea(id)]);
+      const [t, ev, dec] = await Promise.all([api.tarea(id), api.eventosTarea(id), api.decisiones(id)]);
       setTarea(t);
       setEventos(ev);
+      setDecisiones(dec);
       setError(null);
     } catch (err) {
       setError(mensajeError(err));
@@ -139,7 +145,10 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
   useEventos((e) => {
     if (e.tareaId !== id) return;
     setEventos((act) => (act.some((x) => x.seq === e.seq) ? act : [...act, e]));
-    if (e.tipo.startsWith('task.') || e.tipo === 'validation.result' || e.tipo === 'file.changed') void api.tarea(id).then(setTarea).catch(() => {});
+    const cambiaTarea = e.tipo.startsWith('task.') || ['validation.result', 'file.changed', 'coordinator.decision'].includes(e.tipo);
+    const cambiaEquipo = ['agent.proposal', 'agent.review', 'coordinator.decision'].includes(e.tipo) || (e.tipo === 'agent.step' && 'subtarea' in (e.datos as object));
+    if (cambiaTarea || cambiaEquipo) void api.tarea(id).then(setTarea).catch(() => {});
+    if (cambiaEquipo) void api.decisiones(id).then(setDecisiones).catch(() => {});
   });
 
   // Al reconectar, recupera lo que haya cambiado mientras no había conexión.
@@ -171,6 +180,9 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
   }
 
   const activa = tarea.estado === 'ejecutando' || tarea.estado === 'en_cola';
+  const equipo = tarea.colaboracion;
+  // Nombres para identificar en la actividad qué agente hizo cada cosa.
+  const nombres = new Map<string, string>([[tarea.agenteId, tarea.agenteNombre], ...(equipo?.participantes.map((p) => [p.id, p.nombre] as [string, string]) ?? [])]);
 
   return (
     <>
@@ -187,7 +199,9 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
           </div>
           <h1 className="titulo-tarea">{tarea.objetivo}</h1>
           <p>
-            {tarea.proyectoNombre} · {tarea.agenteNombre} · rama <span className="mono">{tarea.rama}</span>
+            {tarea.proyectoNombre} ·{' '}
+            {equipo ? `Equipo: ${tarea.agenteNombre} (coordinador), ${equipo.participantes.map((p) => p.nombre).join(', ')}` : tarea.agenteNombre} · rama{' '}
+            <span className="mono">{tarea.rama}</span>
           </p>
         </div>
         <div className="acciones">
@@ -215,16 +229,22 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
         {tarea.estado === 'esperando_usuario' && tarea.pregunta && <Pregunta tarea={tarea} alResponder={setTarea} />}
       </div>
 
+      {equipo && <FasesEquipo colaboracion={equipo} estado={tarea.estado} />}
+
       <div className="detalle-tarea">
-        <section className="tarjeta">
-          <h2 style={{ marginBottom: 12 }}>Actividad</h2>
-          <LineaTiempo eventos={eventos} />
-        </section>
+        <div style={{ display: 'grid', gap: 16, alignContent: 'start', minWidth: 0 }}>
+          {equipo && <PlanCoordinador colaboracion={equipo} />}
+          <section className="tarjeta">
+            <h2 style={{ marginBottom: 12 }}>Actividad</h2>
+            <LineaTiempo eventos={eventos} nombres={nombres} equipo={!!equipo} />
+          </section>
+        </div>
 
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+          {equipo && <RegistroDecisiones decisiones={decisiones} />}
           {tarea.resumen && (
             <section className="tarjeta">
-              <h2>Resumen del agente</h2>
+              <h2>{equipo ? 'Resumen del equipo' : 'Resumen del agente'}</h2>
               <p className="texto-agente">{tarea.resumen}</p>
             </section>
           )}
@@ -340,9 +360,14 @@ const ETIQUETAS: Partial<Record<EventoTiempoReal['tipo'], string>> = {
   'file.changed': 'Archivo modificado',
   'validation.result': 'Validación',
   'budget.warning': 'Aviso de consumo',
+  'agent.proposal': 'Propuesta',
+  'agent.review': 'Revisión',
+  'coordinator.decision': 'Decisión del coordinador',
 };
 
-function LineaTiempo({ eventos }: { eventos: EventoTiempoReal[] }) {
+function LineaTiempo({ eventos, nombres, equipo }: { eventos: EventoTiempoReal[]; nombres: Map<string, string>; equipo: boolean }) {
+  // En equipo, cada evento dice qué agente lo hizo.
+  const quien = (e: EventoTiempoReal) => (equipo && e.agenteId ? `${nombres.get(e.agenteId) ?? 'Agente'}: ` : '');
   // Desplaza solo la lista (no la página) para mostrar lo más reciente.
   const lista = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -368,12 +393,36 @@ function LineaTiempo({ eventos }: { eventos: EventoTiempoReal[] }) {
             <div className="cuerpo-evento">
               {e.tipo === 'agent.message' ? (
                 <>
-                  <strong>{d.autor === 'usuario' ? 'Tú' : 'Agente'}</strong>
+                  <strong>{d.autor === 'usuario' ? 'Tú' : equipo && e.agenteId ? (nombres.get(e.agenteId) ?? 'Agente') : 'Agente'}</strong>
                   <p className="texto-agente">{String(d.texto)}</p>
                 </>
+              ) : e.tipo === 'agent.proposal' ? (
+                <>
+                  <strong>Propuesta de {String(d.agente)}</strong>
+                  <p className="texto-agente">{String(d.propuesta)}</p>
+                </>
+              ) : e.tipo === 'agent.review' ? (
+                <>
+                  <strong>
+                    Revisión de {String(d.agente)} (ronda {String(d.ronda)}): {d.de_acuerdo ? 'de acuerdo' : 'con objeciones'}
+                  </strong>
+                  <p className="texto-agente">{String(d.revision)}</p>
+                </>
+              ) : e.tipo === 'coordinator.decision' ? (
+                <>
+                  <strong>Decisión del coordinador</strong>
+                  <p className="texto-agente">{String(d.decision)}</p>
+                  <span>{(d.subtareas as unknown[] | undefined)?.length ?? 0} subtarea(s) asignada(s).</span>
+                </>
+              ) : e.tipo === 'agent.step' && typeof d.fase === 'string' ? (
+                <strong>Fase: {NOMBRE_FASE[d.fase as FaseColaboracion] ?? d.fase}</strong>
               ) : e.tipo === 'tool.call' ? (
                 <>
-                  <strong className="mono">{String(d.herramienta)}</strong> <span className="mono args">{resumenArgs(d.entrada)}</span>
+                  <strong className="mono">
+                    {quien(e)}
+                    {String(d.herramienta)}
+                  </strong>{' '}
+                  <span className="mono args">{resumenArgs(d.entrada)}</span>
                   {resultado && <div className={`resultado ${resultado.error ? 'error' : ''}`}>{resultado.resumen.split('\n')[0]}</div>}
                 </>
               ) : e.tipo === 'validation.result' ? (
@@ -382,7 +431,7 @@ function LineaTiempo({ eventos }: { eventos: EventoTiempoReal[] }) {
                 </>
               ) : e.tipo === 'file.changed' ? (
                 <>
-                  <strong>Archivo modificado:</strong> <span className="mono">{String(d.ruta)}</span>
+                  <strong>{quien(e)}Archivo modificado:</strong> <span className="mono">{String(d.ruta)}</span>
                 </>
               ) : (
                 <>

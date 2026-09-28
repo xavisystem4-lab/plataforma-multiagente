@@ -170,4 +170,54 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
       CREATE INDEX idx_eventos_tarea ON eventos(tarea_id, seq);
     `,
   },
+  {
+    version: 4,
+    nombre: 'colaboracion_multiagente',
+    sql: `
+      ALTER TABLE tareas ADD COLUMN modo TEXT NOT NULL DEFAULT 'individual';
+      -- Configuración del equipo: {coordinadorId, participantes[], maxRondas}.
+      ALTER TABLE tareas ADD COLUMN colaboracion TEXT;
+      ALTER TABLE tareas ADD COLUMN fase TEXT;
+      ALTER TABLE tareas ADD COLUMN decision TEXT;
+      -- Consumo por agente dentro de la tarea: {agenteId: {entrada, salida}}.
+      ALTER TABLE tareas ADD COLUMN uso_agentes TEXT NOT NULL DEFAULT '{}';
+
+      CREATE TABLE subtareas (
+        id TEXT PRIMARY KEY,
+        tarea_id TEXT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+        indice INTEGER NOT NULL,
+        agente_id TEXT NOT NULL REFERENCES agentes(id) ON DELETE RESTRICT,
+        titulo TEXT NOT NULL,
+        descripcion TEXT NOT NULL,
+        archivos TEXT NOT NULL,
+        depende_de TEXT NOT NULL DEFAULT '[]',
+        estado TEXT NOT NULL DEFAULT 'pendiente',
+        rama TEXT NOT NULL,
+        conversacion TEXT NOT NULL DEFAULT '[]',
+        resumen TEXT,
+        error TEXT,
+        pregunta TEXT,
+        pregunta_llamada TEXT,
+        creada_en TEXT NOT NULL,
+        actualizada_en TEXT NOT NULL,
+        UNIQUE (tarea_id, indice)
+      );
+
+      -- Registro de propuestas, revisiones y decisiones: nunca se modifica; solo se borra
+      -- junto con su tarea (al desconectar el proyecto). La auditoría general sí es permanente.
+      CREATE TABLE decisiones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarea_id TEXT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+        agente_id TEXT,
+        tipo TEXT NOT NULL CHECK (tipo IN ('propuesta','revision','decision','integracion')),
+        ronda INTEGER NOT NULL DEFAULT 0,
+        contenido TEXT NOT NULL,
+        datos TEXT,
+        fecha TEXT NOT NULL
+      );
+      CREATE INDEX idx_decisiones_tarea ON decisiones(tarea_id, id);
+      CREATE TRIGGER decisiones_sin_update BEFORE UPDATE ON decisiones
+        BEGIN SELECT RAISE(ABORT, 'El registro de decisiones no se puede modificar'); END;
+    `,
+  },
 ];

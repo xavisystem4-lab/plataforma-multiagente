@@ -148,6 +148,28 @@ export async function resolverRuta(raiz: string, relativa: string): Promise<stri
 
 const relativaA = (raiz: string, abs: string) => path.relative(raiz, abs).split(path.sep).join('/') || '.';
 
+/** ¿La ruta relativa (con "/") está cubierta por algún archivo o carpeta ("dir/") permitido? */
+export function rutaCubierta(rel: string, permitidas: string[]): boolean {
+  return permitidas.some((p) => (p.endsWith('/') ? rel.startsWith(p) : rel === p));
+}
+
+/**
+ * Normaliza una ruta del plan del coordinador: relativa, con "/", sin "./", "..", ni .git.
+ * Devuelve null si no es aceptable.
+ */
+export function normalizarRutaPlan(ruta: string): string | null {
+  const r = ruta.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!r || r.startsWith('/') || /^[a-zA-Z]:/.test(r) || r.includes('\0')) return null;
+  const partes = r.split('/');
+  if (partes.some((p, i) => p === '..' || p === '.' || p.toLowerCase() === '.git' || (p === '' && i < partes.length - 1))) return null;
+  return r;
+}
+
+export interface OpcionesEjecutor {
+  /** Si se indica, solo se puede escribir en estos archivos o carpetas ("dir/"). */
+  rutasEscritura?: string[];
+}
+
 export class EjecutorHerramientas {
   private readonly permitidas: Set<string>;
 
@@ -155,8 +177,19 @@ export class EjecutorHerramientas {
     private readonly raiz: string,
     permisos: IdHerramienta[],
     private readonly acciones: AccionesOrquestador,
+    private readonly opciones: OpcionesEjecutor = {},
   ) {
     this.permitidas = new Set(herramientasPara(permisos).map((h) => h.nombre));
+  }
+
+  /** Aislamiento entre subtareas paralelas: cada agente escribe solo en lo que se le asignó. */
+  private verificarEscritura(rel: string): ResultadoHerramienta | null {
+    const permitidas = this.opciones.rutasEscritura;
+    if (!permitidas || rutaCubierta(rel, permitidas)) return null;
+    return {
+      error: true,
+      contenido: `"${rel}" está fuera de los archivos asignados a tu subtarea (${permitidas.join(', ')}). Si es necesario modificarlo, usa solicitar_intervencion.`,
+    };
   }
 
   async ejecutar(nombre: string, entrada: unknown): Promise<ResultadoHerramienta> {
@@ -271,6 +304,8 @@ export class EjecutorHerramientas {
 
   private async escribir(r: string, contenido: string): Promise<ResultadoHerramienta> {
     const archivo = await resolverRuta(this.raiz, r);
+    const fuera = this.verificarEscritura(relativaA(this.raiz, archivo));
+    if (fuera) return fuera;
     const existente = await lstat(archivo).catch(() => null);
     if (existente?.isSymbolicLink()) return { error: true, contenido: 'No se escribe sobre enlaces simbólicos.' };
     if (existente?.isDirectory()) return { error: true, contenido: 'La ruta es una carpeta.' };
@@ -282,6 +317,8 @@ export class EjecutorHerramientas {
 
   private async reemplazar(r: string, buscar: string, reemplazar: string): Promise<ResultadoHerramienta> {
     const archivo = await resolverRuta(this.raiz, r);
+    const fuera = this.verificarEscritura(relativaA(this.raiz, archivo));
+    if (fuera) return fuera;
     if ((await lstat(archivo)).isSymbolicLink()) return { error: true, contenido: 'No se escribe sobre enlaces simbólicos.' };
     const texto = await readFile(archivo, 'utf8');
     const veces = texto.split(buscar).length - 1;

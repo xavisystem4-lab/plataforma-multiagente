@@ -13,8 +13,8 @@ así que el trabajo continúa aunque cierres la laptop.
 | F0 | Monorepo, backend con login seguro, app Windows (Electron) con tema SoftGala | ✅ Completada |
 | F1 | Proyectos de GitHub, alta de agentes (multi-proveedor), bóveda de claves, auditoría visible | ✅ Completada |
 | F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | ✅ Completada |
-| F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | Siguiente |
-| F4 | Diff, aprobación, reversión | Pendiente |
+| F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | ✅ Completada |
+| F4 | Diff, aprobación, reversión | Siguiente |
 | F5 | Instalador de Windows y APK de Android (Capacitor) | Pendiente |
 | F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
 
@@ -87,6 +87,24 @@ Variables opcionales en `.env`: `MAX_AGENTES_POR_USUARIO`, `MAX_PROYECTOS_POR_US
 
 Límites que detienen la ejecución: tokens, costo estimado y minutos por agente, presupuesto mensual del
 proyecto, máximo de turnos por ejecución y una tarea activa por proyecto.
+
+## Uso (F3): equipo de agentes
+
+En **Continuar proyecto** elige **Equipo de agentes**, un coordinador, los participantes (hasta 6) y las
+rondas de revisión (0 a 3). El trabajo avanza por fases:
+
+1. **Propuestas**: cada participante analiza el proyecto (solo lectura) y entrega su propuesta, en paralelo.
+2. **Revisión cruzada**: cada uno revisa las propuestas de los demás y puede actualizar la suya. Se detiene
+   al llegar al máximo de rondas o antes, si todos están de acuerdo.
+3. **Síntesis**: el coordinador resuelve los desacuerdos y registra un plan de subtareas (máx. 8), cada una con
+   su agente y sus archivos. El plan se valida en el servidor (agentes del equipo, rutas seguras).
+4. **Ejecución**: las subtareas con archivos distintos corren **en paralelo**, cada una en su rama; las que
+   comparten archivos esperan a las anteriores. Cada agente **solo puede escribir en sus archivos asignados**.
+5. **Integración**: se integran las ramas en la rama de la tarea (un conflicto se aborta y se informa) y se
+   ejecutan las validaciones.
+
+Cada propuesta, revisión, decisión e integración queda en un registro que no se puede modificar, con el
+agente responsable. La tarea se puede pausar y reanudar en cualquier fase sin repetir lo ya hecho.
 
 ## Pruebas
 

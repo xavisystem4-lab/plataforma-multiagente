@@ -12,8 +12,8 @@ const FASES: { id: string; nombre: string; estado: 'lista' | 'actual' | 'pendien
   { id: 'F0', nombre: 'Base del sistema, login seguro y tema visual', estado: 'lista' },
   { id: 'F1', nombre: 'Proyectos de GitHub, agentes y bóveda de claves', estado: 'lista' },
   { id: 'F2', nombre: 'Orquestador, sandbox y progreso en tiempo real', estado: 'lista' },
-  { id: 'F3', nombre: 'Colaboración multiagente con coordinador', estado: 'actual' },
-  { id: 'F4', nombre: 'Revisión de cambios, aprobación y reversión', estado: 'pendiente' },
+  { id: 'F3', nombre: 'Colaboración multiagente con coordinador', estado: 'lista' },
+  { id: 'F4', nombre: 'Revisión de cambios, aprobación y reversión', estado: 'actual' },
   { id: 'F5', nombre: 'Instalador de Windows y APK de Android', estado: 'pendiente' },
   { id: 'F6', nombre: 'Despliegue remoto y endurecimiento', estado: 'pendiente' },
 ];

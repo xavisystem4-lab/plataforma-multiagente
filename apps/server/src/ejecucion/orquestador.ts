@@ -4,11 +4,17 @@ import path from 'node:path';
 import {
   ESTADOS_REANUDABLES,
   type AgentePublico,
+  type ColaboracionPublica,
+  type DecisionPublica,
+  type EstadoSubtarea,
   type EstadoTarea,
   type EventoTiempoReal,
+  type FaseColaboracion,
+  type ModoTarea,
   type ResultadoValidacion,
   type SolicitudContinuar,
   type TareaPublica,
+  type TipoDecision,
   type TipoEvento,
 } from '@softgala/shared';
 import { auditar } from '../auditoria';
@@ -20,20 +26,28 @@ import { leerJson, type Actor, type Contexto } from '../servicios/contexto';
 import type { ServicioProveedores } from '../servicios/proveedores';
 import type { ServicioProyectos } from '../servicios/proyectos';
 import type { BusEventos } from './bus';
+import { ejecutarCiclo, FinEjecucion } from './ciclo';
+import { Colaboracion, PREFIJO_PREGUNTA_SUBTAREA } from './colaboracion';
 import { ErrorGit, type EspaciosGit } from './git';
-import { EjecutorHerramientas, HERRAMIENTA_PREGUNTA, herramientasPara, type ResultadoHerramienta } from './herramientas';
+import { EjecutorHerramientas, herramientasPara, type ResultadoHerramienta } from './herramientas';
 import { promptInicial, promptSistema } from './politicas';
 import type { Sandbox } from './sandbox';
 
 export interface OpcionesOrquestador {
   /** Tareas ejecutándose a la vez en todo el servidor. */
   maxSimultaneas: number;
-  /** Turnos máximos de conversación por ejecución (evita ciclos infinitos). */
+  /** Turnos máximos de conversación por ejecución de cada agente (evita ciclos infinitos). */
   maxTurnos: number;
   /** Tokens máximos por respuesta del modelo. */
   maxTokensRespuesta: number;
   /** Tiempo máximo de cada validación. */
   timeoutValidacionMs: number;
+}
+
+interface ConfigColaboracion {
+  coordinadorId: string;
+  participantes: string[];
+  maxRondas: number;
 }
 
 interface FilaTarea {
@@ -45,6 +59,10 @@ interface FilaTarea {
   agente_nombre: string;
   objetivo: string;
   estado: EstadoTarea;
+  modo: ModoTarea;
+  colaboracion: string | null;
+  fase: FaseColaboracion | null;
+  decision: string | null;
   rama: string;
   pregunta: string | null;
   pregunta_llamada: string | null;
@@ -56,6 +74,7 @@ interface FilaTarea {
   tokens_entrada: number;
   tokens_salida: number;
   costo_usd: number | null;
+  uso_agentes: string;
   ms_ejecucion: number;
   creada_en: string;
   iniciada_en: string | null;
@@ -63,16 +82,7 @@ interface FilaTarea {
 }
 
 type Motivo = 'pausa' | 'cancelacion' | 'tiempo' | 'apagado';
-
-/** Termina la ejecución con un estado final o de espera, sin tratarlo como error inesperado. */
-class FinEjecucion extends Error {
-  constructor(
-    readonly estado: EstadoTarea,
-    mensaje: string,
-  ) {
-    super(mensaje);
-  }
-}
+type DatosProyecto = ReturnType<ServicioProyectos['paraEjecucion']>;
 
 const CONSULTA = `
   SELECT t.*, p.nombre AS proyecto_nombre, a.nombre AS agente_nombre
@@ -87,17 +97,6 @@ const slug = (texto: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 40)
     .replace(/-+$/, '') || 'tarea';
-
-/** Resume la entrada de una herramienta para el evento (sin volcar contenidos completos). */
-function resumirEntrada(entrada: unknown): Record<string, unknown> {
-  if (!entrada || typeof entrada !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(entrada as Record<string, unknown>).map(([k, v]) => [
-      k,
-      typeof v === 'string' ? (v.length > 200 ? `${v.slice(0, 200)}… (${v.length} caracteres)` : v) : v,
-    ]),
-  );
-}
 
 export class Orquestador {
   private readonly enCurso = new Map<string, { control: AbortController; motivo: Motivo | null }>();
@@ -121,7 +120,7 @@ export class Orquestador {
   // API pública
   // -------------------------------------------------------------------------
 
-  /** "Continuar proyecto": reanuda la tarea pausada o crea una nueva con el objetivo dado. */
+  /** "Continuar proyecto": reanuda la tarea pausada o crea una nueva (individual o colaborativa). */
   continuar(actor: Actor, proyectoId: string, sol: SolicitudContinuar): TareaPublica {
     const proyecto = this.s.proyectos.obtener(actor, proyectoId);
     const activa = this.ctx.db
@@ -142,7 +141,19 @@ export class Orquestador {
       return this.reanudar(actor, pendiente.id);
     }
 
-    const agente = this.elegirAgente(actor, proyecto.agentes, sol.agenteId);
+    const activos = proyecto.agentes.filter((a) => a.activo);
+    let agente: AgentePublico;
+    let colaboracion: ConfigColaboracion | null = null;
+    if (sol.modo === 'colaborativo') {
+      const habilitado = (id: string) => activos.some((a) => a.agenteId === id);
+      if (!habilitado(sol.coordinadorId!)) throw new ErrorApp(409, 'AGENTE_NO_HABILITADO', 'El coordinador no está habilitado y activo en este proyecto.');
+      const ajeno = sol.participantes!.find((id) => !habilitado(id));
+      if (ajeno) throw new ErrorApp(409, 'AGENTE_NO_HABILITADO', 'Algún participante no está habilitado y activo en este proyecto.');
+      agente = this.s.agentes.obtener(actor, sol.coordinadorId!);
+      colaboracion = { coordinadorId: sol.coordinadorId!, participantes: sol.participantes!, maxRondas: sol.maxRondas };
+    } else {
+      agente = this.elegirAgente(actor, activos, sol.agenteId);
+    }
     this.verificarPresupuesto(actor.id, proyectoId);
 
     const id = randomUUID();
@@ -150,12 +161,19 @@ export class Orquestador {
     const rama = `agentes/${slug(sol.objetivo)}-${id.slice(0, 6)}`;
     this.ctx.db
       .prepare(
-        `INSERT INTO tareas (id, usuario_id, proyecto_id, agente_id, objetivo, estado, rama, creada_en, actualizada_en)
-         VALUES (?, ?, ?, ?, ?, 'en_cola', ?, ?, ?)`,
+        `INSERT INTO tareas (id, usuario_id, proyecto_id, agente_id, objetivo, estado, modo, colaboracion, rama, creada_en, actualizada_en)
+         VALUES (?, ?, ?, ?, ?, 'en_cola', ?, ?, ?, ?, ?)`,
       )
-      .run(id, actor.id, proyectoId, agente.id, sol.objetivo, rama, ahora, ahora);
-    auditar(this.ctx.db, { accion: 'tarea.creada', usuarioId: actor.id, proyectoId, agenteId: agente.id, detalle: { tareaId: id, rama }, ip: actor.ip });
-    this.emitir(this.fila(actor.id, id), 'task.created', { objetivo: sol.objetivo, rama, agente: agente.nombre });
+      .run(id, actor.id, proyectoId, agente.id, sol.objetivo, sol.modo, colaboracion ? JSON.stringify(colaboracion) : null, rama, ahora, ahora);
+    auditar(this.ctx.db, {
+      accion: 'tarea.creada',
+      usuarioId: actor.id,
+      proyectoId,
+      agenteId: agente.id,
+      detalle: { tareaId: id, rama, modo: sol.modo, ...(colaboracion ? { participantes: colaboracion.participantes.length, rondas: colaboracion.maxRondas } : {}) },
+      ip: actor.ip,
+    });
+    this.emitir(this.fila(actor.id, id), 'task.created', { objetivo: sol.objetivo, rama, agente: agente.nombre, modo: sol.modo });
     this.encolar(id);
     return this.obtener(actor, id);
   }
@@ -206,24 +224,37 @@ export class Orquestador {
     return this.obtener(actor, id);
   }
 
-  /** Entrega la respuesta del usuario a la pregunta pendiente del agente y reanuda. */
+  /** Entrega la respuesta del usuario a la pregunta pendiente (de la tarea o de una subtarea) y reanuda. */
   responder(actor: Actor, id: string, respuesta: string): TareaPublica {
     const t = this.fila(actor.id, id);
     if (t.estado !== 'esperando_usuario' || !t.pregunta_llamada) {
       throw new ErrorApp(409, 'ESTADO_INVALIDO', 'La tarea no está esperando una respuesta.');
     }
-    const mensajes = leerJson<MensajeConversacion[]>(t.conversacion, []);
-    const ultimo = mensajes.at(-1);
-    const resultado = { id: t.pregunta_llamada, contenido: `Respuesta del usuario: ${respuesta}`, error: false };
-    // Todos los resultados de un turno van en un solo mensaje.
-    if (ultimo?.rol === 'resultados') ultimo.resultados.push(resultado);
-    else mensajes.push({ rol: 'resultados', resultados: [resultado] });
+    const resultadoPara = (llamada: string) => ({ id: llamada, contenido: `Respuesta del usuario: ${respuesta}`, error: false });
+    const agregar = (conversacion: string, llamada: string) => {
+      const mensajes = leerJson<MensajeConversacion[]>(conversacion, []);
+      const ultimo = mensajes.at(-1);
+      // Todos los resultados de un turno van en un solo mensaje.
+      if (ultimo?.rol === 'resultados') ultimo.resultados.push(resultadoPara(llamada));
+      else mensajes.push({ rol: 'resultados', resultados: [resultadoPara(llamada)] });
+      return JSON.stringify(mensajes);
+    };
 
-    this.cambiarEstado(t, 'en_cola', 'agent.message', { autor: 'usuario', texto: respuesta }, {
-      pregunta: null,
-      pregunta_llamada: null,
-      conversacion: JSON.stringify(mensajes),
-    });
+    let extra: Partial<Record<'conversacion', string>> = {};
+    if (t.pregunta_llamada.startsWith(PREFIJO_PREGUNTA_SUBTAREA)) {
+      const [subId = '', ...resto] = t.pregunta_llamada.slice(PREFIJO_PREGUNTA_SUBTAREA.length).split(':');
+      const sub = this.ctx.db.prepare('SELECT conversacion FROM subtareas WHERE id = ? AND tarea_id = ?').get(subId, id) as
+        | { conversacion: string }
+        | undefined;
+      if (!sub) throw noEncontrado('Subtarea no encontrada');
+      this.ctx.db
+        .prepare("UPDATE subtareas SET conversacion = ?, estado = 'pendiente', pregunta = NULL, pregunta_llamada = NULL WHERE id = ?")
+        .run(agregar(sub.conversacion, resto.join(':')), subId);
+    } else {
+      extra = { conversacion: agregar(t.conversacion, t.pregunta_llamada) };
+    }
+
+    this.cambiarEstado(t, 'en_cola', 'agent.message', { autor: 'usuario', texto: respuesta }, { pregunta: null, pregunta_llamada: null, ...extra });
     auditar(this.ctx.db, { accion: 'tarea.respondida', usuarioId: actor.id, proyectoId: t.proyecto_id, detalle: { tareaId: id }, ip: actor.ip });
     this.encolar(id);
     return this.obtener(actor, id);
@@ -235,16 +266,37 @@ export class Orquestador {
         ? this.ctx.db.prepare(`${CONSULTA} WHERE t.usuario_id = ? AND t.proyecto_id = ? ORDER BY t.creada_en DESC LIMIT 100`).all(actor.id, proyectoId)
         : this.ctx.db.prepare(`${CONSULTA} WHERE t.usuario_id = ? ORDER BY t.creada_en DESC LIMIT 100`).all(actor.id)
     ) as unknown as FilaTarea[];
-    return filas.map(aPublica);
+    return filas.map((f) => this.aPublica(f));
   }
 
   obtener(actor: Actor, id: string): TareaPublica {
-    return aPublica(this.fila(actor.id, id));
+    return this.aPublica(this.fila(actor.id, id));
   }
 
   eventos(actor: Actor, id: string, desde = 0): EventoTiempoReal[] {
     this.fila(actor.id, id);
     return this.bus.deTarea(actor.id, id, desde);
+  }
+
+  /** Registro de propuestas, revisiones y decisiones de la tarea, con el agente responsable. */
+  decisiones(actor: Actor, id: string): DecisionPublica[] {
+    this.fila(actor.id, id);
+    const filas = this.ctx.db
+      .prepare(
+        `SELECT d.id, d.tipo, d.agente_id, a.nombre AS agente_nombre, d.ronda, d.contenido, d.datos, d.fecha
+         FROM decisiones d LEFT JOIN agentes a ON a.id = d.agente_id WHERE d.tarea_id = ? ORDER BY d.id`,
+      )
+      .all(id) as { id: number; tipo: TipoDecision; agente_id: string | null; agente_nombre: string | null; ronda: number; contenido: string; datos: string | null; fecha: string }[];
+    return filas.map((f) => ({
+      id: f.id,
+      tipo: f.tipo,
+      agenteId: f.agente_id,
+      agenteNombre: f.agente_nombre,
+      ronda: f.ronda,
+      contenido: f.contenido,
+      datos: leerJson<Record<string, unknown> | null>(f.datos, null),
+      fecha: f.fecha,
+    }));
   }
 
   /** Al arrancar: las tareas que quedaron a medias se marcan como pausadas (reanudables). */
@@ -311,7 +363,7 @@ export class Orquestador {
   }
 
   // -------------------------------------------------------------------------
-  // Ejecución de una tarea
+  // Ejecución
   // -------------------------------------------------------------------------
 
   private async ejecutar(id: string, control: AbortController): Promise<void> {
@@ -321,10 +373,10 @@ export class Orquestador {
     let t = this.fila(usuarioId, id);
     const actor: Actor = { id: usuarioId, rol: 'usuario', ip: null };
     const inicio = Date.now();
-    let msAcumulados = t.ms_ejecucion;
+    const msPrevios = t.ms_ejecucion;
     let temporizador: NodeJS.Timeout | undefined;
 
-    const reanudando = leerJson<MensajeConversacion[]>(t.conversacion, []).length > 0;
+    const reanudando = t.iniciada_en !== null;
     this.cambiarEstado(t, 'ejecutando', reanudando ? 'task.resumed' : 'task.started', { agente: t.agente_nombre, rama: t.rama }, {
       iniciada_en: t.iniciada_en ?? this.ctx.ahora().toISOString(),
       error: null,
@@ -332,12 +384,11 @@ export class Orquestador {
 
     try {
       const proyecto = this.s.proyectos.paraEjecucion(usuarioId, t.proyecto_id);
-      const agente = this.s.agentes.obtener(actor, t.agente_id);
-      if (!agente.activo) throw new FinEjecucion('pausada', `El agente "${agente.nombre}" está desactivado; actívalo para continuar.`);
-      const cred = this.s.proveedores.credenciales(usuarioId, agente.proveedorId);
+      const principal = this.s.agentes.obtener(actor, t.agente_id);
+      if (!principal.activo) throw new FinEjecucion('pausada', `El agente "${principal.nombre}" está desactivado; actívalo para continuar.`);
 
-      // Límite de tiempo acumulado del agente.
-      const restanteMs = agente.limites.maxMinutosPorTarea * 60_000 - msAcumulados;
+      // Límite de tiempo acumulado (en colaboración, el del coordinador para toda la tarea).
+      const restanteMs = principal.limites.maxMinutosPorTarea * 60_000 - msPrevios;
       if (restanteMs <= 0) throw new FinEjecucion('fallida', 'Se alcanzó el límite de tiempo del agente para esta tarea.');
       temporizador = setTimeout(() => {
         const e = this.enCurso.get(id);
@@ -347,115 +398,12 @@ export class Orquestador {
         }
       }, restanteMs);
 
-      const dir = await this.prepararEspacio(t, proyecto);
-      const validar = (nombre: string) => this.ejecutarValidacion(t, dir, proyecto.validaciones, nombre);
-      const ejecutor = new EjecutorHerramientas(dir, agente.herramientas, {
-        ejecutarValidacion: validar,
-        commit: async (mensaje) => {
-          const sha = await this.git.commit(dir, mensaje, `Agente ${agente.nombre}`);
-          return { error: false, contenido: sha ? `Commit ${sha.slice(0, 7)} creado.` : 'No había cambios para hacer commit.' };
-        },
-      });
-      const adaptador = this.ctx.adaptadores(cred.tipo, cred);
-      const herramientas = herramientasPara(agente.herramientas);
-      const sistema = promptSistema({
-        agente,
-        repositorio: proyecto.repositorio,
-        rama: t.rama,
-        ramaBase: proyecto.ramaBase,
-        validaciones: proyecto.validaciones,
-        sandboxDisponible: this.sandbox.disponible,
-        motivoSandbox: this.sandbox.motivo,
-      });
+      this.emitir(t, 'agent.step', { paso: 'preparando', mensaje: 'Sincronizando el repositorio en el servidor…' });
+      await this.git.sincronizar(proyecto.id, proyecto.repositorio, proyecto.token);
+      const dir = await this.git.prepararTarea(proyecto.id, t.id, t.rama, proyecto.ramaBase);
 
-      const mensajes = leerJson<MensajeConversacion[]>(t.conversacion, []);
-      if (mensajes.length === 0) {
-        const listado = await ejecutor.ejecutar('listar_directorio', { ruta: '.' });
-        mensajes.push({ rol: 'usuario', texto: promptInicial(t.objetivo, listado.error ? '(no disponible)' : listado.contenido) });
-      }
-      const archivos = new Set(leerJson<string[]>(t.archivos, []));
-      let avisoPresupuesto = false;
-
-      for (let turno = 1; ; turno++) {
-        if (turno > this.op.maxTurnos) throw new FinEjecucion('fallida', `Se alcanzó el máximo de ${this.op.maxTurnos} turnos sin terminar.`);
-        t = this.fila(usuarioId, id);
-        this.verificarLimites(t, agente, proyecto.limites.presupuestoMensualUsd);
-
-        const r = await adaptador.turno({
-          modelo: agente.modelo,
-          sistema,
-          mensajes,
-          herramientas,
-          maxTokens: this.op.maxTokensRespuesta,
-          senal: control.signal,
-        });
-        this.registrarUso(t, cred.tipo, agente.modelo, r.uso.entrada, r.uso.salida);
-        const usados = t.tokens_entrada + t.tokens_salida + r.uso.entrada + r.uso.salida;
-        if (!avisoPresupuesto && usados >= agente.limites.maxTokensPorTarea * 0.8) {
-          avisoPresupuesto = true;
-          this.emitir(t, 'budget.warning', {
-            mensaje: `La tarea usó el ${Math.round((usados / agente.limites.maxTokensPorTarea) * 100)} % de sus tokens.`,
-            tokens: usados,
-            limite: agente.limites.maxTokensPorTarea,
-          });
-        }
-        if (r.mensaje.texto) this.emitir(t, 'agent.message', { autor: 'agente', texto: r.mensaje.texto });
-
-        if (r.fin === 'rechazo') throw new FinEjecucion('fallida', 'El modelo rechazó continuar con la solicitud.');
-        if (r.fin === 'limite_tokens') {
-          throw new FinEjecucion('fallida', 'La respuesta del modelo se cortó por el límite de tokens por respuesta.');
-        }
-        if (r.mensaje.llamadas.length === 0) {
-          mensajes.push(r.mensaje);
-          this.guardarConversacion(id, mensajes);
-          await this.finalizar(t, dir, proyecto, agente, r.mensaje.texto, archivos);
-          return;
-        }
-
-        // Ejecuta las herramientas; una pregunta al usuario se atiende al final del turno.
-        const resultados: { id: string; contenido: string; error: boolean }[] = [];
-        let pregunta: { id: string; texto: string } | null = null;
-        for (const ll of r.mensaje.llamadas) {
-          if (control.signal.aborted) break;
-          if (ll.nombre === HERRAMIENTA_PREGUNTA) {
-            const texto = (ll.entrada as { pregunta?: unknown })?.pregunta;
-            if (typeof texto === 'string' && texto.trim()) {
-              pregunta = { id: ll.id, texto: texto.trim().slice(0, 2000) };
-              continue;
-            }
-            resultados.push({ id: ll.id, contenido: 'Falta el texto de la pregunta.', error: true });
-            continue;
-          }
-          this.emitir(t, 'tool.call', { herramienta: ll.nombre, entrada: resumirEntrada(ll.entrada) });
-          let res: ResultadoHerramienta;
-          try {
-            res = await ejecutor.ejecutar(ll.nombre, ll.entrada);
-          } catch (err) {
-            this.ctx.log.error({ err, tareaId: id }, 'Error ejecutando herramienta');
-            res = { error: true, contenido: 'Error interno al ejecutar la herramienta.' };
-          }
-          this.emitir(t, 'tool.result', { herramienta: ll.nombre, error: res.error, resumen: res.contenido.slice(0, 500) });
-          if (res.archivoModificado) {
-            archivos.add(res.archivoModificado);
-            this.emitir(t, 'file.changed', { ruta: res.archivoModificado });
-          }
-          resultados.push({ id: ll.id, contenido: res.contenido, error: res.error });
-        }
-        if (control.signal.aborted) throw control.signal.reason ?? new Error('abortado');
-
-        // Punto consistente: el turno del asistente y sus resultados se guardan juntos.
-        mensajes.push(r.mensaje);
-        if (resultados.length) mensajes.push({ rol: 'resultados', resultados });
-        this.guardarConversacion(id, mensajes, [...archivos]);
-
-        if (pregunta) {
-          this.cambiarEstado(t, 'esperando_usuario', 'task.waiting', { pregunta: pregunta.texto }, {
-            pregunta: pregunta.texto,
-            pregunta_llamada: pregunta.id,
-          });
-          return;
-        }
-      }
+      if (t.modo === 'colaborativo') await this.ejecutarColaborativa(t, actor, proyecto, principal, dir, control.signal);
+      else await this.ejecutarIndividual(t, proyecto, principal, dir, control.signal);
     } catch (err) {
       t = this.fila(usuarioId, id);
       const motivo = this.enCurso.get(id)?.motivo ?? null;
@@ -478,29 +426,124 @@ export class Orquestador {
       }
     } finally {
       clearTimeout(temporizador);
-      msAcumulados += Date.now() - inicio;
-      this.ctx.db.prepare('UPDATE tareas SET ms_ejecucion = ? WHERE id = ?').run(msAcumulados, id);
+      this.ctx.db.prepare('UPDATE tareas SET ms_ejecucion = ? WHERE id = ?').run(msPrevios + (Date.now() - inicio), id);
     }
   }
 
-  private async prepararEspacio(
+  /** Un solo agente trabaja en la rama de la tarea. */
+  private async ejecutarIndividual(t: FilaTarea, proyecto: DatosProyecto, agente: AgentePublico, dir: string, senal: AbortSignal): Promise<void> {
+    const cred = this.s.proveedores.credenciales(t.usuario_id, agente.proveedorId);
+    const ejecutor = new EjecutorHerramientas(dir, agente.herramientas, {
+      ejecutarValidacion: (nombre) => this.ejecutarValidacion(t, dir, proyecto.validaciones, nombre),
+      commit: async (mensaje) => {
+        const sha = await this.git.commit(dir, mensaje, `Agente ${agente.nombre}`);
+        return { error: false, contenido: sha ? `Commit ${sha.slice(0, 7)} creado.` : 'No había cambios para hacer commit.' };
+      },
+    });
+    const mensajes = leerJson<MensajeConversacion[]>(t.conversacion, []);
+    if (mensajes.length === 0) {
+      const listado = await ejecutor.ejecutar('listar_directorio', { ruta: '.' });
+      mensajes.push({ rol: 'usuario', texto: promptInicial(t.objetivo, listado.error ? '(no disponible)' : listado.contenido) });
+    }
+    const archivos = new Set(leerJson<string[]>(t.archivos, []));
+
+    const r = await ejecutarCiclo({
+      adaptador: this.ctx.adaptadores(cred.tipo, cred),
+      modelo: agente.modelo,
+      sistema: promptSistema({
+        agente,
+        repositorio: proyecto.repositorio,
+        rama: t.rama,
+        ramaBase: proyecto.ramaBase,
+        validaciones: proyecto.validaciones,
+        sandboxDisponible: this.sandbox.disponible,
+        motivoSandbox: this.sandbox.motivo,
+      }),
+      herramientas: herramientasPara(agente.herramientas),
+      ejecutor,
+      mensajes,
+      senal,
+      maxTurnos: this.op.maxTurnos,
+      maxTokensRespuesta: this.op.maxTokensRespuesta,
+      antesDeTurno: () => this.verificarLimites(t.id, t.usuario_id, agente, proyecto.limites.presupuestoMensualUsd),
+      alUsar: (ent, sal) => this.registrarUso(t, cred.tipo, agente, ent, sal),
+      emitir: (tipo, datos) => this.emitir(t, tipo, datos),
+      guardar: (m) => this.guardarConversacion(t.id, m, [...archivos]),
+      alModificarArchivo: (ruta) => archivos.add(ruta),
+      alErrorInterno: (err) => this.ctx.log.error({ err, tareaId: t.id }, 'Error ejecutando herramienta'),
+    });
+
+    if (r.tipo === 'pregunta') {
+      this.cambiarEstado(t, 'esperando_usuario', 'task.waiting', { pregunta: r.texto }, { pregunta: r.texto, pregunta_llamada: r.id });
+      return;
+    }
+    await this.finalizar(t, dir, proyecto, agente, r.texto, archivos);
+  }
+
+  /** Equipo de agentes: propuestas, revisión, plan del coordinador, subtareas paralelas e integración. */
+  private async ejecutarColaborativa(
     t: FilaTarea,
-    proyecto: ReturnType<ServicioProyectos['paraEjecucion']>,
-  ): Promise<string> {
-    this.emitir(t, 'agent.step', { paso: 'preparando', mensaje: 'Sincronizando el repositorio en el servidor…' });
-    await this.git.sincronizar(proyecto.id, proyecto.repositorio, proyecto.token);
-    return this.git.prepararTarea(proyecto.id, t.id, t.rama, proyecto.ramaBase);
+    actor: Actor,
+    proyecto: DatosProyecto,
+    coordinador: AgentePublico,
+    dir: string,
+    senal: AbortSignal,
+  ): Promise<void> {
+    const config = leerJson<ConfigColaboracion>(t.colaboracion, { coordinadorId: coordinador.id, participantes: [], maxRondas: 0 });
+    const participantes = config.participantes.map((id) => this.s.agentes.obtener(actor, id));
+    const inactivo = participantes.find((a) => !a.activo);
+    if (inactivo) throw new FinEjecucion('pausada', `El agente "${inactivo.nombre}" está desactivado; actívalo para continuar.`);
+
+    const listado = await new EjecutorHerramientas(dir, ['leer_archivos'], {
+      ejecutarValidacion: async () => ({ error: true, contenido: '' }),
+      commit: async () => ({ error: true, contenido: '' }),
+    }).ejecutar('listar_directorio', { ruta: '.' });
+
+    const colaboracion = new Colaboracion({
+      ctx: this.ctx,
+      git: this.git,
+      tarea: { id: t.id, objetivo: t.objetivo, rama: t.rama },
+      proyecto,
+      coordinador,
+      participantes,
+      maxRondas: config.maxRondas,
+      dirIntegracion: dir,
+      senal,
+      maxTurnos: this.op.maxTurnos,
+      maxTokensRespuesta: this.op.maxTokensRespuesta,
+      sandbox: this.infoSandbox,
+      adaptadorPara: (a) => {
+        const cred = this.s.proveedores.credenciales(t.usuario_id, a.proveedorId);
+        return this.ctx.adaptadores(cred.tipo, cred);
+      },
+      emitir: (tipo, datos, agenteId) => this.emitir(t, tipo, datos, agenteId),
+      registrarUso: (a, ent, sal) => this.registrarUso(t, this.s.proveedores.credenciales(t.usuario_id, a.proveedorId).tipo, a, ent, sal),
+      verificarLimites: (a) => {
+        this.verificarLimites(t.id, t.usuario_id, a, proyecto.limites.presupuestoMensualUsd);
+        // Tope global de la tarea: el costo máximo del coordinador.
+        const f = this.fila(t.usuario_id, t.id);
+        if (f.costo_usd !== null && f.costo_usd >= coordinador.limites.maxCostoUsdPorTarea) {
+          throw new FinEjecucion('fallida', `Se alcanzó el límite de costo de la tarea (${coordinador.limites.maxCostoUsdPorTarea} USD, estimado).`);
+        }
+      },
+      ejecutarValidacion: (d, nombre) => this.ejecutarValidacion(t, d, proyecto.validaciones, nombre),
+      cambiarFase: (fase) => {
+        this.ctx.db.prepare('UPDATE tareas SET fase = ? WHERE id = ?').run(fase, t.id);
+        this.emitir(t, 'agent.step', { fase, mensaje: `Fase: ${fase}` });
+      },
+      alErrorInterno: (err) => this.ctx.log.error({ err, tareaId: t.id }, 'Error en la colaboración'),
+    });
+
+    const r = await colaboracion.ejecutar(listado.error ? '(no disponible)' : listado.contenido);
+    if (r.tipo === 'pregunta') {
+      this.cambiarEstado(t, 'esperando_usuario', 'task.waiting', { pregunta: r.texto }, { pregunta: r.texto, pregunta_llamada: r.llamada });
+      return;
+    }
+    await this.finalizar(t, dir, proyecto, coordinador, r.resumen, new Set());
   }
 
   /** Cierra la tarea: validaciones configuradas, commit final y resumen. */
-  private async finalizar(
-    t: FilaTarea,
-    dir: string,
-    proyecto: ReturnType<ServicioProyectos['paraEjecucion']>,
-    agente: AgentePublico,
-    resumen: string,
-    archivos: Set<string>,
-  ): Promise<void> {
+  private async finalizar(t: FilaTarea, dir: string, proyecto: DatosProyecto, agente: AgentePublico, resumen: string, archivos: Set<string>): Promise<void> {
     this.emitir(t, 'agent.step', { paso: 'validando', mensaje: 'Ejecutando las validaciones del proyecto…' });
     for (const v of proyecto.validaciones) await this.ejecutarValidacion(t, dir, proyecto.validaciones, v.nombre);
 
@@ -509,7 +552,7 @@ export class Orquestador {
     for (const a of archivos) if (!cambiados.includes(a)) cambiados.push(a);
 
     const final = this.fila(t.usuario_id, t.id);
-    this.cambiarEstado(final, 'completada', 'task.completed', { resumen, archivos: cambiados, commit: sha }, {
+    this.cambiarEstado(final, 'completada', 'task.completed', { resumen: resumen.slice(0, 4000), archivos: cambiados, commit: sha }, {
       resumen,
       archivos: JSON.stringify(cambiados.sort()),
       terminada_en: this.ctx.ahora().toISOString(),
@@ -553,19 +596,22 @@ export class Orquestador {
   }
 
   // -------------------------------------------------------------------------
-  // Límites
+  // Límites y consumo
   // -------------------------------------------------------------------------
 
-  /** Lanza si se superó algún límite de la tarea o el presupuesto mensual del proyecto. */
-  private verificarLimites(t: FilaTarea, agente: AgentePublico, presupuestoMensual: number): void {
-    const tokens = t.tokens_entrada + t.tokens_salida;
+  /** Lanza si el agente superó sus límites en esta tarea o si se agotó el presupuesto mensual del proyecto. */
+  private verificarLimites(tareaId: string, usuarioId: string, agente: AgentePublico, presupuestoMensual: number): void {
+    const t = this.fila(usuarioId, tareaId);
+    const uso = leerJson<Record<string, { entrada: number; salida: number; costo: number | null }>>(t.uso_agentes, {})[agente.id];
+    const tokens = uso ? uso.entrada + uso.salida : 0;
     const l = agente.limites;
-    if (tokens >= l.maxTokensPorTarea) throw new FinEjecucion('fallida', `Se alcanzó el límite de ${l.maxTokensPorTarea.toLocaleString('es-MX')} tokens del agente.`);
-    if (t.costo_usd !== null && t.costo_usd >= l.maxCostoUsdPorTarea) {
-      throw new FinEjecucion('fallida', `Se alcanzó el límite de costo del agente (${l.maxCostoUsdPorTarea} USD, estimado).`);
+    if (tokens >= l.maxTokensPorTarea) {
+      throw new FinEjecucion('fallida', `El agente "${agente.nombre}" alcanzó su límite de ${l.maxTokensPorTarea.toLocaleString('es-MX')} tokens.`);
     }
-    const gastoMes = this.gastoMensual(t.proyecto_id);
-    if (presupuestoMensual > 0 && gastoMes >= presupuestoMensual) {
+    if (uso?.costo != null && uso.costo >= l.maxCostoUsdPorTarea) {
+      throw new FinEjecucion('fallida', `El agente "${agente.nombre}" alcanzó su límite de costo (${l.maxCostoUsdPorTarea} USD, estimado).`);
+    }
+    if (presupuestoMensual > 0 && this.gastoMensual(t.proyecto_id) >= presupuestoMensual) {
       throw new FinEjecucion('pausada', `Se agotó el presupuesto mensual del proyecto (${presupuestoMensual} USD, estimado).`);
     }
   }
@@ -586,22 +632,46 @@ export class Orquestador {
     return f.total;
   }
 
-  private registrarUso(t: FilaTarea, tipo: Parameters<typeof costoEstimado>[0], modelo: string, entrada: number, salida: number): void {
-    const costo = costoEstimado(tipo, modelo, entrada, salida);
+  /** Suma el consumo a la tarea y al agente; avisa una vez por agente al pasar el 80 % de sus tokens. */
+  private registrarUso(t: FilaTarea, tipo: Parameters<typeof costoEstimado>[0], agente: AgentePublico, entrada: number, salida: number): void {
+    const costo = costoEstimado(tipo, agente.modelo, entrada, salida);
+    const actual = this.fila(t.usuario_id, t.id);
+    const uso = leerJson<Record<string, { entrada: number; salida: number; costo: number | null; avisado?: boolean }>>(actual.uso_agentes, {});
+    const previo = uso[agente.id] ?? { entrada: 0, salida: 0, costo: null };
+    const nuevo = {
+      entrada: previo.entrada + entrada,
+      salida: previo.salida + salida,
+      costo: costo === null ? previo.costo : (previo.costo ?? 0) + costo,
+      avisado: previo.avisado,
+    };
+    const limite = agente.limites.maxTokensPorTarea;
+    if (!nuevo.avisado && nuevo.entrada + nuevo.salida >= limite * 0.8) {
+      nuevo.avisado = true;
+      this.emitir(
+        t,
+        'budget.warning',
+        {
+          mensaje: `${agente.nombre} usó el ${Math.round(((nuevo.entrada + nuevo.salida) / limite) * 100)} % de sus tokens.`,
+          tokens: nuevo.entrada + nuevo.salida,
+          limite,
+        },
+        agente.id,
+      );
+    }
+    uso[agente.id] = nuevo;
     this.ctx.db
       .prepare(
-        `UPDATE tareas SET tokens_entrada = tokens_entrada + ?, tokens_salida = tokens_salida + ?,
+        `UPDATE tareas SET tokens_entrada = tokens_entrada + ?, tokens_salida = tokens_salida + ?, uso_agentes = ?,
            costo_usd = CASE WHEN ? IS NULL THEN costo_usd ELSE COALESCE(costo_usd, 0) + ? END WHERE id = ?`,
       )
-      .run(entrada, salida, costo, costo, t.id);
+      .run(entrada, salida, JSON.stringify(uso), costo, costo, t.id);
   }
 
   // -------------------------------------------------------------------------
   // Ayudantes
   // -------------------------------------------------------------------------
 
-  private elegirAgente(actor: Actor, habilitados: { agenteId: string; rol: string; activo: boolean }[], agenteId?: string): AgentePublico {
-    const activos = habilitados.filter((a) => a.activo);
+  private elegirAgente(actor: Actor, activos: { agenteId: string; rol: string }[], agenteId?: string): AgentePublico {
     if (agenteId) {
       if (!activos.some((a) => a.agenteId === agenteId)) {
         throw new ErrorApp(409, 'AGENTE_NO_HABILITADO', 'Ese agente no está habilitado y activo en este proyecto.');
@@ -632,16 +702,19 @@ export class Orquestador {
   ): void {
     const campos = Object.keys(extra);
     this.ctx.db
-      .prepare(
-        `UPDATE tareas SET estado = ?, actualizada_en = ?${campos.map((c) => `, ${c} = ?`).join('')} WHERE id = ?`,
-      )
+      .prepare(`UPDATE tareas SET estado = ?, actualizada_en = ?${campos.map((c) => `, ${c} = ?`).join('')} WHERE id = ?`)
       .run(estado, this.ctx.ahora().toISOString(), ...campos.map((c) => extra[c as keyof typeof extra] ?? null), t.id);
     if (evento) this.emitir(t, evento, { estado, ...datos });
     else this.emitir(t, 'agent.step', { estado, paso: estado });
   }
 
-  private emitir(t: Pick<FilaTarea, 'id' | 'usuario_id' | 'proyecto_id' | 'agente_id'>, tipo: TipoEvento, datos: Record<string, unknown>): void {
-    this.bus.publicar({ usuarioId: t.usuario_id, proyectoId: t.proyecto_id, tareaId: t.id, agenteId: t.agente_id, tipo, datos });
+  private emitir(
+    t: Pick<FilaTarea, 'id' | 'usuario_id' | 'proyecto_id' | 'agente_id'>,
+    tipo: TipoEvento,
+    datos: Record<string, unknown>,
+    agenteId?: string,
+  ): void {
+    this.bus.publicar({ usuarioId: t.usuario_id, proyectoId: t.proyecto_id, tareaId: t.id, agenteId: agenteId ?? t.agente_id, tipo, datos });
   }
 
   private fila(usuarioId: string, id: string): FilaTarea {
@@ -649,26 +722,69 @@ export class Orquestador {
     if (!f) throw noEncontrado('Tarea no encontrada');
     return f;
   }
-}
 
-function aPublica(f: FilaTarea): TareaPublica {
-  return {
-    id: f.id,
-    proyectoId: f.proyecto_id,
-    proyectoNombre: f.proyecto_nombre,
-    agenteId: f.agente_id,
-    agenteNombre: f.agente_nombre,
-    objetivo: f.objetivo,
-    estado: f.estado,
-    rama: f.rama,
-    pregunta: f.pregunta,
-    resumen: f.resumen,
-    error: f.error,
-    archivosModificados: leerJson<string[]>(f.archivos, []),
-    validaciones: leerJson<ResultadoValidacion[]>(f.validaciones, []),
-    uso: { tokensEntrada: f.tokens_entrada, tokensSalida: f.tokens_salida, costoUsd: f.costo_usd },
-    creadaEn: f.creada_en,
-    iniciadaEn: f.iniciada_en,
-    terminadaEn: f.terminada_en,
-  };
+  private aPublica(f: FilaTarea): TareaPublica {
+    let colaboracion: ColaboracionPublica | null = null;
+    if (f.modo === 'colaborativo') {
+      const config = leerJson<ConfigColaboracion>(f.colaboracion, { coordinadorId: f.agente_id, participantes: [], maxRondas: 0 });
+      const nombres = new Map(
+        (this.ctx.db.prepare(`SELECT id, nombre FROM agentes WHERE usuario_id = ?`).all(f.usuario_id) as { id: string; nombre: string }[]).map((a) => [a.id, a.nombre]),
+      );
+      const subtareas = this.ctx.db.prepare('SELECT * FROM subtareas WHERE tarea_id = ? ORDER BY indice').all(f.id) as {
+        id: string;
+        indice: number;
+        titulo: string;
+        descripcion: string;
+        agente_id: string;
+        archivos: string;
+        depende_de: string;
+        estado: EstadoSubtarea;
+        rama: string;
+        resumen: string | null;
+        error: string | null;
+      }[];
+      colaboracion = {
+        coordinadorId: config.coordinadorId,
+        participantes: config.participantes.map((id) => ({ id, nombre: nombres.get(id) ?? 'Agente eliminado' })),
+        maxRondas: config.maxRondas,
+        fase: f.fase,
+        decision: f.decision,
+        subtareas: subtareas.map((s) => ({
+          id: s.id,
+          indice: s.indice,
+          titulo: s.titulo,
+          descripcion: s.descripcion,
+          agenteId: s.agente_id,
+          agenteNombre: nombres.get(s.agente_id) ?? 'Agente',
+          archivos: leerJson<string[]>(s.archivos, []),
+          dependeDe: leerJson<number[]>(s.depende_de, []),
+          estado: s.estado,
+          rama: s.rama,
+          resumen: s.resumen,
+          error: s.error,
+        })),
+      };
+    }
+    return {
+      id: f.id,
+      proyectoId: f.proyecto_id,
+      proyectoNombre: f.proyecto_nombre,
+      agenteId: f.agente_id,
+      agenteNombre: f.agente_nombre,
+      modo: f.modo,
+      colaboracion,
+      objetivo: f.objetivo,
+      estado: f.estado,
+      rama: f.rama,
+      pregunta: f.pregunta,
+      resumen: f.resumen,
+      error: f.error,
+      archivosModificados: leerJson<string[]>(f.archivos, []),
+      validaciones: leerJson<ResultadoValidacion[]>(f.validaciones, []),
+      uso: { tokensEntrada: f.tokens_entrada, tokensSalida: f.tokens_salida, costoUsd: f.costo_usd },
+      creadaEn: f.creada_en,
+      iniciadaEn: f.iniciada_en,
+      terminadaEn: f.terminada_en,
+    };
+  }
 }

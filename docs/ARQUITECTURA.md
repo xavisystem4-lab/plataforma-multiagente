@@ -41,11 +41,12 @@ validaciones, límites, avisos) y `proyecto_agentes`. Todos los recursos pertene
 recibe 404.
 
 F2 agrega `tareas` (estado, rama, conversación para reanudar, consumo, validaciones) y `eventos`
-(secuencia creciente para reenviar al reconectar).
+(secuencia creciente para reenviar al reconectar). F3 agrega `subtareas` (agente, archivos asignados,
+dependencias, rama, conversación) y `decisiones` (propuestas, revisiones, decisiones e integraciones; no se
+pueden modificar).
 
 Planeado:
 
-- `propuestas`, `revisiones`, `decisiones` (colaboración y registro de quién decidió qué).
 - `conjuntos_cambios` (diff, rama, commit), `aprobaciones`, `validaciones` (comando, resultado real, salida).
 - `presupuestos` por agente y periodo.
 
@@ -64,6 +65,7 @@ Planeado:
 | POST | `/api/proyectos/:id/continuar` | ✅ |
 | GET | `/api/tareas`, `/api/tareas/:id`, `/api/tareas/:id/eventos` · GET `/api/sistema` | ✅ |
 | POST | `/api/tareas/:id/pausar`, `/reanudar`, `/cancelar`, `/responder` | ✅ |
+| GET | `/api/tareas/:id/decisiones` (registro del equipo) | ✅ |
 | GET | `/api/tareas/:id/diff` | F4 |
 | POST | `/api/aprobaciones/:id/aprobar`, `/rechazar` | F4 |
 | POST | `/api/cambios/:id/revertir` | F4 |
@@ -90,6 +92,18 @@ Los tipos de evento de tiempo real están en `packages/shared/src/eventos.ts`.
   no ejecutadas.
 - **Tiempo real**: los eventos se guardan con secuencia y se difunden solo al usuario dueño. El WebSocket
   revalida la sesión cada 30 s.
+
+## Implementación de F3 (colaboración)
+
+- `ejecucion/ciclo.ts`: ciclo del agente reutilizable (modo individual, cada fase y cada subtarea), con
+  "herramientas terminales" para entregas estructuradas (`entregar_propuesta`, `entregar_revision`,
+  `registrar_plan`).
+- `ejecucion/colaboracion.ts`: fases, paralelismo limitado por `maxAgentesSimultaneos` del proyecto,
+  cálculo de dependencias por archivos compartidos, ejecución por oleadas e integración con `git merge --no-ff`.
+- Límites: rondas (0–3, parada por consenso), máximo 8 subtareas, turnos por agente, tokens y costo por agente
+  en la tarea, costo total (el del coordinador), tiempo total (el del coordinador) y presupuesto mensual.
+- Si una subtarea falla, las que dependen de ella no se ejecutan y la tarea informa cuáles. Las preguntas de
+  una subtarea llegan al usuario con el nombre del agente y la respuesta vuelve a esa subtarea.
 
 ## Flujo de "Continuar proyecto" (F2–F4)
 

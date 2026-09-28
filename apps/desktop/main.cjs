@@ -159,8 +159,8 @@ function guionLogin(email, password, pagina, clic) {
       await new Promise((r) => setTimeout(r, 1500));
       [...document.querySelectorAll('.nav-item')].find((b) => b.textContent.trim() === pagina)?.click();
     }
-    const clic = ${JSON.stringify(clic ?? '')};
-    if (clic) {
+    // Varios clics separados por "|" (p. ej. abrir un diálogo y elegir una opción).
+    for (const clic of ${JSON.stringify(clic ?? '')}.split('|').filter(Boolean)) {
       await new Promise((r) => setTimeout(r, 1200));
       [...document.querySelectorAll('.contenido button, .contenido tr[tabindex]')].find((b) => b.textContent.includes(clic))?.click();
     }

@@ -1,6 +1,9 @@
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { construirApp, type Dependencias } from '../src/app';
 import { SandboxNoDisponible } from '../src/ejecucion/sandbox';
@@ -112,3 +115,27 @@ export function fetchSimulado(rutas: Record<string, Manejador>) {
 
 export const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'content-type': 'application/json' } });
+
+// ---------------------------------------------------------------------------
+// Repositorio Git local que hace de "GitHub" (protocolo file://)
+// ---------------------------------------------------------------------------
+
+export const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', ['-c', 'user.name=Prueba', '-c', 'user.email=p@p.local', ...args], { cwd, encoding: 'utf8' });
+
+export function crearOrigen(archivos: Record<string, string> = { 'README.md': '# Demo\n\nProyecto de prueba.\n', 'app.js': 'console.log("hola");\n' }) {
+  const base = mkdtempSync(path.join(tmpdir(), 'softgala-origen-'));
+  temporales.add(base);
+  const bare = path.join(base, 'origen.git');
+  const trabajo = path.join(base, 'trabajo');
+  execFileSync('git', ['init', '--bare', '-q', '-b', 'main', bare]);
+  execFileSync('git', ['init', '-q', '-b', 'main', trabajo]);
+  for (const [ruta, contenido] of Object.entries(archivos)) {
+    mkdirSync(path.dirname(path.join(trabajo, ruta)), { recursive: true });
+    writeFileSync(path.join(trabajo, ruta), contenido);
+  }
+  git(trabajo, 'add', '.');
+  git(trabajo, 'commit', '-q', '-m', 'Inicial');
+  git(trabajo, 'push', '-q', bare, 'main');
+  return { bare, url: pathToFileURL(bare).toString() };
+}

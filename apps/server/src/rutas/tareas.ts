@@ -29,6 +29,7 @@ export function rutasTareas(app: FastifyInstance, orquestador: Orquestador, aute
       return orquestador.listar(actorDe(req), proyectoId);
     });
     api.get('/api/tareas/:id', async (req) => orquestador.obtener(actorDe(req), conId.parse(req.params).id));
+    api.get('/api/tareas/:id/decisiones', async (req) => orquestador.decisiones(actorDe(req), conId.parse(req.params).id));
     api.get('/api/tareas/:id/eventos', async (req) => {
       const { desde } = z.object({ desde: z.coerce.number().int().min(0).default(0) }).parse(req.query);
       return orquestador.eventos(actorDe(req), conId.parse(req.params).id, desde);

@@ -68,6 +68,35 @@ export class EspaciosGit {
     return dir;
   }
 
+  /** Worktree de una subtarea: rama nueva creada desde otra rama local (la de integración). */
+  async prepararDesde(proyectoId: string, nombreDir: string, rama: string, desde: string): Promise<string> {
+    const dir = this.dirTarea(proyectoId, nombreDir);
+    if (existsSync(path.join(dir, '.git'))) return dir;
+    mkdirSync(path.dirname(dir), { recursive: true });
+    await this.git(['worktree', 'add', '--quiet', '-b', rama, dir, desde], { cwd: this.dirRepo(proyectoId) });
+    return dir;
+  }
+
+  /**
+   * Integra `rama` en el worktree `dir` con un merge explícito. Si hay conflicto, lo aborta
+   * (el worktree queda como estaba) y devuelve los archivos en conflicto.
+   */
+  async integrar(dir: string, rama: string, mensaje: string): Promise<{ ok: true } | { ok: false; conflictos: string[] }> {
+    try {
+      await this.git(
+        ['-c', 'user.name=Coordinador', '-c', 'user.email=agentes@softgala.local', 'merge', '--no-ff', '--no-edit', '-m', mensaje, rama],
+        { cwd: dir },
+      );
+      return { ok: true };
+    } catch (err) {
+      const { stdout } = await this.git(['diff', '--name-only', '--diff-filter=U'], { cwd: dir }).catch(() => ({ stdout: '' }));
+      await this.git(['merge', '--abort'], { cwd: dir }).catch(() => undefined);
+      const conflictos = stdout.split('\n').filter(Boolean);
+      if (!conflictos.length) throw err;
+      return { ok: false, conflictos };
+    }
+  }
+
   /** Commit de todos los cambios del worktree. Devuelve el sha o null si no había cambios. */
   async commit(dir: string, mensaje: string, autor: string): Promise<string | null> {
     await this.git(['add', '--all'], { cwd: dir });
