@@ -157,12 +157,17 @@ function guionLogin(email, password, pagina, clic) {
     const pagina = ${JSON.stringify(pagina ?? '')};
     if (pagina) {
       await new Promise((r) => setTimeout(r, 1500));
-      [...document.querySelectorAll('.nav-item')].find((b) => b.textContent.trim() === pagina)?.click();
+      [...document.querySelectorAll('.nav-item')].find((b) => b.querySelector('span')?.textContent.trim() === pagina)?.click();
     }
     // Varios clics separados por "|" (p. ej. abrir un diálogo y elegir una opción).
     for (const clic of ${JSON.stringify(clic ?? '')}.split('|').filter(Boolean)) {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, ${Number(process.env.CAPTURA_PAUSA) || 1200}));
       [...document.querySelectorAll('.contenido button, .contenido tr[tabindex]')].find((b) => b.textContent.includes(clic))?.click();
+    }
+    const desplazar = ${Number(process.env.CAPTURA_DESPLAZAR) || 0};
+    if (desplazar) {
+      await new Promise((r) => setTimeout(r, 1500));
+      document.querySelector('.contenido').scrollTop = desplazar;
     }
   })()`;
 }

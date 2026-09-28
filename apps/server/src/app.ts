@@ -11,12 +11,14 @@ import type { Config } from './config';
 import type { Db } from './db';
 import { ErrorApp } from './errores';
 import { BusEventos } from './ejecucion/bus';
-import { EspaciosGit, type OpcionesGit } from './ejecucion/git';
+import { ErrorGit, EspaciosGit, type OpcionesGit } from './ejecucion/git';
 import { Orquestador } from './ejecucion/orquestador';
 import { detectarSandbox, type Sandbox } from './ejecucion/sandbox';
 import { ClienteGitHub } from './externo/github';
 import { crearFabricaAdaptadores, type FabricaAdaptadores } from './modelos/adaptadores';
+import { rutasRevision } from './rutas/revision';
 import { rutasTareas, rutaTiempoReal } from './rutas/tareas';
+import { ServicioRevision } from './servicios/revision';
 import { rutasRecursos, type Servicios } from './rutas/recursos';
 import { Boveda } from './security/boveda';
 import { ServicioAgentes } from './servicios/agentes';
@@ -89,6 +91,10 @@ export async function construirApp(dep: Dependencias): Promise<FastifyInstance> 
     if (err instanceof ErrorApp) {
       return rep.code(err.estado).send(cuerpoError(err.codigo, err.message));
     }
+    if (err instanceof ErrorGit) {
+      // El mensaje ya viene sin credenciales (ver limpiar() en ejecucion/git.ts).
+      return rep.code(502).send(cuerpoError('GIT_ERROR', err.message));
+    }
     if (err instanceof ZodError) {
       const primero = err.issues[0];
       return rep.code(400).send(cuerpoError('VALIDACION', primero?.message ?? 'Datos no válidos'));
@@ -135,13 +141,16 @@ export async function construirApp(dep: Dependencias): Promise<FastifyInstance> 
   });
   const sandbox = dep.sandbox ?? (await detectarSandbox(config.sandbox));
   const orquestador = new Orquestador(ctx, servicios, bus, git, sandbox, config.ejecucion);
+  const revision = new ServicioRevision(ctx, git, servicios.proyectos, bus);
+  orquestador.alCompletarConCambios = (tareaId) => revision.crearSolicitud(tareaId);
   app.decorate('orquestador', orquestador);
   app.addHook('onClose', async () => orquestador.detener());
 
-  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.3.0' }));
+  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.4.0' }));
   rutasAuth(app, auth, autenticar);
   rutasRecursos(app, servicios, autenticar, (proyectoId) => orquestador.limpiarProyecto(proyectoId));
   rutasTareas(app, orquestador, autenticar);
+  rutasRevision(app, revision, autenticar);
   rutaTiempoReal(app, bus, auth, config);
 
   return app;

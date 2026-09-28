@@ -13,8 +13,8 @@ const FASES: { id: string; nombre: string; estado: 'lista' | 'actual' | 'pendien
   { id: 'F1', nombre: 'Proyectos de GitHub, agentes y bóveda de claves', estado: 'lista' },
   { id: 'F2', nombre: 'Orquestador, sandbox y progreso en tiempo real', estado: 'lista' },
   { id: 'F3', nombre: 'Colaboración multiagente con coordinador', estado: 'lista' },
-  { id: 'F4', nombre: 'Revisión de cambios, aprobación y reversión', estado: 'actual' },
-  { id: 'F5', nombre: 'Instalador de Windows y APK de Android', estado: 'pendiente' },
+  { id: 'F4', nombre: 'Revisión de cambios, aprobación y reversión', estado: 'lista' },
+  { id: 'F5', nombre: 'Instalador de Windows y APK de Android', estado: 'actual' },
   { id: 'F6', nombre: 'Despliegue remoto y endurecimiento', estado: 'pendiente' },
 ];
 
@@ -39,7 +39,7 @@ export function Panel({
   const nombre = usuario.nombre.split(' ')[0];
 
   useEventos((e) => {
-    if (e.tipo.startsWith('task.')) void recargar();
+    if (e.tipo.startsWith('task.') || e.tipo.startsWith('approval.')) void recargar();
   });
 
   const pasos = [
@@ -58,6 +58,14 @@ export function Panel({
       </div>
       <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
         {error && <Alerta>{error}</Alerta>}
+        {r && r.aprobacionesPendientes > 0 && (
+          <Alerta tipo="info">
+            {r.aprobacionesPendientes === 1 ? 'Hay cambios listos' : `Hay ${r.aprobacionesPendientes} tareas con cambios listos`} para tu revisión.{' '}
+            <button className="boton boton-texto" onClick={() => irA('aprobaciones')}>
+              Revisar
+            </button>
+          </Alerta>
+        )}
         {r && r.tareasEsperando > 0 && (
           <Alerta tipo="aviso">
             {r.tareasEsperando === 1 ? 'Una tarea espera' : `${r.tareasEsperando} tareas esperan`} tu respuesta.{' '}

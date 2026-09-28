@@ -22,6 +22,8 @@ export type TipoEvento =
   | 'file.changed'
   | 'validation.result'
   | 'approval.requested'
+  | 'approval.resolved'
+  | 'task.reverted'
   | 'budget.warning';
 
 export interface EventoTiempoReal<T = unknown> {

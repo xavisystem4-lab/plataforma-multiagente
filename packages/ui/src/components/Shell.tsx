@@ -13,7 +13,7 @@ import {
 } from './Iconos';
 import { Logo } from './Logo';
 
-export type Pagina = 'panel' | 'tareas' | 'proyectos' | 'agentes' | 'modelos' | 'auditoria' | 'seguridad';
+export type Pagina = 'panel' | 'tareas' | 'aprobaciones' | 'proyectos' | 'agentes' | 'modelos' | 'auditoria' | 'seguridad';
 
 interface ItemNav {
   id: Pagina | null;
@@ -28,7 +28,7 @@ const PRINCIPAL: ItemNav[] = [
   { id: 'proyectos', texto: 'Proyectos', Icono: IconoProyecto },
   { id: 'agentes', texto: 'Agentes', Icono: IconoAgentes },
   { id: 'tareas', texto: 'Tareas', Icono: IconoTareas },
-  { id: null, texto: 'Aprobaciones', Icono: IconoAprobar, fase: 'F4' },
+  { id: 'aprobaciones', texto: 'Aprobaciones', Icono: IconoAprobar },
 ];
 const ADMINISTRACION: ItemNav[] = [
   { id: 'modelos', texto: 'Modelos IA', Icono: IconoModelos },
@@ -45,13 +45,15 @@ const iniciales = (nombre: string) =>
 
 interface Props {
   usuario: UsuarioPublico;
+  /** Contadores por página (p. ej. aprobaciones pendientes). */
+  contadores?: Partial<Record<Pagina, number>>;
   pagina: Pagina;
   alNavegar(p: Pagina): void;
   alSalir(): void;
   children: ReactNode;
 }
 
-export function Shell({ usuario, pagina, alNavegar, alSalir, children }: Props) {
+export function Shell({ usuario, pagina, alNavegar, alSalir, contadores = {}, children }: Props) {
   const item = ({ id, texto, Icono, fase }: ItemNav) => (
     <button
       key={texto}
@@ -64,6 +66,11 @@ export function Shell({ usuario, pagina, alNavegar, alSalir, children }: Props) 
       <Icono />
       <span>{texto}</span>
       {fase && <span className="etiqueta">{fase}</span>}
+      {id && !!contadores[id] && (
+        <span className="contador" aria-label={`${contadores[id]} pendientes`}>
+          {contadores[id]}
+        </span>
+      )}
     </button>
   );
 

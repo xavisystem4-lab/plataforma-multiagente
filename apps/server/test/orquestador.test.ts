@@ -223,7 +223,8 @@ describe('Continuar proyecto: flujo completo', () => {
     const tipos = (await eventos(t.id)).map((e) => e.tipo);
     expect(tipos[0]).toBe('task.created');
     expect(tipos).toEqual(expect.arrayContaining(['task.started', 'tool.call', 'tool.result', 'file.changed', 'validation.result', 'agent.message']));
-    expect(tipos.at(-1)).toBe('task.completed');
+    // Al terminar con cambios se pide aprobación para publicarlos (nada se publica solo).
+    expect(tipos.slice(-2)).toEqual(['task.completed', 'approval.requested']);
   });
 
   it('solo expone al modelo las herramientas autorizadas y rechaza las demás', async () => {

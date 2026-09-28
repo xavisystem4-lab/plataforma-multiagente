@@ -1,5 +1,7 @@
-import { NOMBRE_ESTADO, NOMBRE_FASE, type DecisionPublica, type EstadoTarea, type EventoTiempoReal, type FaseColaboracion, type ResultadoValidacion, type TareaPublica } from '@softgala/shared';
+import { NOMBRE_ESTADO, NOMBRE_FASE, type DecisionPublica, type DiffTarea, type EstadoTarea, type EventoTiempoReal, type FaseColaboracion, type ResultadoValidacion, type TareaPublica } from '@softgala/shared';
 import { FasesEquipo, PlanCoordinador, RegistroDecisiones } from '../components/Equipo';
+import { PanelRevision } from '../components/Revision';
+import { VisorDiff } from '../components/VisorDiff';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Alerta, BotonCarga, Encabezado, fecha, Vacio } from '../components/Comunes';
 import { ContinuarProyecto } from '../components/ContinuarProyecto';
@@ -145,7 +147,7 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
   useEventos((e) => {
     if (e.tareaId !== id) return;
     setEventos((act) => (act.some((x) => x.seq === e.seq) ? act : [...act, e]));
-    const cambiaTarea = e.tipo.startsWith('task.') || ['validation.result', 'file.changed', 'coordinator.decision'].includes(e.tipo);
+    const cambiaTarea = e.tipo.startsWith('task.') || e.tipo.startsWith('approval.') || ['validation.result', 'file.changed', 'coordinator.decision'].includes(e.tipo);
     const cambiaEquipo = ['agent.proposal', 'agent.review', 'coordinator.decision'].includes(e.tipo) || (e.tipo === 'agent.step' && 'subtarea' in (e.datos as object));
     if (cambiaTarea || cambiaEquipo) void api.tarea(id).then(setTarea).catch(() => {});
     if (cambiaEquipo) void api.decisiones(id).then(setDecisiones).catch(() => {});
@@ -230,6 +232,11 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
       </div>
 
       {equipo && <FasesEquipo colaboracion={equipo} estado={tarea.estado} />}
+      {tarea.publicacion && (
+        <div style={{ marginBottom: 16 }}>
+          <PanelRevision tarea={tarea} alCambiar={() => void cargar()} />
+        </div>
+      )}
 
       <div className="detalle-tarea">
         <div style={{ display: 'grid', gap: 16, alignContent: 'start', minWidth: 0 }}>
@@ -265,7 +272,6 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
             ) : (
               <p>Ninguno todavía.</p>
             )}
-            <p style={{ fontSize: 12, marginTop: 10 }}>La revisión del diff y la aprobación para integrar llegan en la fase F4.</p>
           </section>
           <section className="tarjeta">
             <h2>Consumo</h2>
@@ -288,7 +294,48 @@ function DetalleTarea({ id, alVolver }: { id: string; alVolver(): void }) {
           </section>
         </div>
       </div>
+
+      {(tarea.estado === 'completada' || tarea.archivosModificados.length > 0) && <Cambios tareaId={tarea.id} version={tarea.publicacion?.estado ?? ''} />}
     </>
+  );
+}
+
+/** Diff de la tarea respecto a la rama base. */
+function Cambios({ tareaId, version }: { tareaId: string; version: string }) {
+  const { api } = useSesion();
+  const [diff, setDiff] = useState<DiffTarea | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      setDiff(await api.diffTarea(tareaId));
+      setError(null);
+    } catch (err) {
+      setDiff(null);
+      setError(mensajeError(err));
+    } finally {
+      setCargando(false);
+    }
+  }, [api, tareaId]);
+
+  // Se recarga al cambiar el estado de publicación (p. ej. al descartar).
+  useEffect(() => {
+    void cargar();
+  }, [cargar, version]);
+
+  return (
+    <section className="tarjeta" style={{ marginTop: 16 }}>
+      <div className="seccion-titulo">
+        <h2>Cambios</h2>
+        <BotonCarga className="boton boton-chico" cargando={cargando} onClick={() => void cargar()}>
+          Actualizar
+        </BotonCarga>
+      </div>
+      {error && <Alerta tipo="aviso">{error}</Alerta>}
+      {diff && <VisorDiff diff={diff} />}
+    </section>
   );
 }
 
@@ -360,6 +407,9 @@ const ETIQUETAS: Partial<Record<EventoTiempoReal['tipo'], string>> = {
   'file.changed': 'Archivo modificado',
   'validation.result': 'Validación',
   'budget.warning': 'Aviso de consumo',
+  'approval.requested': 'Aprobación solicitada',
+  'approval.resolved': 'Aprobación resuelta',
+  'task.reverted': 'Cambios revertidos',
   'agent.proposal': 'Propuesta',
   'agent.review': 'Revisión',
   'coordinator.decision': 'Decisión del coordinador',

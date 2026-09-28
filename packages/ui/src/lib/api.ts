@@ -4,7 +4,13 @@ import type {
   ErrorApi,
   EstadoRepositorio,
   EventoTiempoReal,
+  AprobacionPublica,
   DecisionPublica,
+  DiffTarea,
+  EstadoAprobacion,
+  PublicacionTarea,
+  SolicitudAprobar,
+  SolicitudRechazar,
   TareaPublica,
   PaginaAuditoria,
   ProveedorEdicion,
@@ -151,6 +157,14 @@ export class ClienteApi {
     this.solicitud<TareaPublica>('POST', `/api/tareas/${enc(id)}/${accion}`);
   responder = (id: string, respuesta: string) =>
     this.solicitud<TareaPublica>('POST', `/api/tareas/${enc(id)}/responder`, { respuesta });
+
+  // ---- Revisión y publicación (F4) ----
+  aprobaciones = (estado?: EstadoAprobacion) =>
+    this.solicitud<AprobacionPublica[]>('GET', `/api/aprobaciones${estado ? `?estado=${estado}` : ''}`);
+  aprobar = (id: string, d: SolicitudAprobar) => this.solicitud<AprobacionPublica>('POST', `/api/aprobaciones/${enc(id)}/aprobar`, d);
+  rechazar = (id: string, d: SolicitudRechazar) => this.solicitud<AprobacionPublica>('POST', `/api/aprobaciones/${enc(id)}/rechazar`, d);
+  diffTarea = (id: string) => this.solicitud<DiffTarea>('GET', `/api/tareas/${enc(id)}/diff`);
+  revertir = (id: string) => this.solicitud<PublicacionTarea>('POST', `/api/tareas/${enc(id)}/revertir`);
 
   /** Token de acceso vigente (lo renueva si hace falta), para autenticar el WebSocket. */
   async tokenAcceso(): Promise<string> {

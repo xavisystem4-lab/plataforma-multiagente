@@ -11,6 +11,7 @@ import {
   type EventoTiempoReal,
   type FaseColaboracion,
   type ModoTarea,
+  type PublicacionTarea,
   type ResultadoValidacion,
   type SolicitudContinuar,
   type TareaPublica,
@@ -75,6 +76,7 @@ interface FilaTarea {
   tokens_salida: number;
   costo_usd: number | null;
   uso_agentes: string;
+  publicacion: string | null;
   ms_ejecucion: number;
   creada_en: string;
   iniciada_en: string | null;
@@ -102,6 +104,8 @@ export class Orquestador {
   private readonly enCurso = new Map<string, { control: AbortController; motivo: Motivo | null }>();
   private readonly cola: string[] = [];
   private inactivo: (() => void)[] = [];
+  /** Se invoca cuando una tarea termina con cambios (crea la solicitud de aprobación). */
+  alCompletarConCambios: (tareaId: string) => void = () => {};
 
   constructor(
     private readonly ctx: Contexto,
@@ -557,6 +561,8 @@ export class Orquestador {
       archivos: JSON.stringify(cambiados.sort()),
       terminada_en: this.ctx.ahora().toISOString(),
     });
+    // Nada se publica sin aprobación: se crea la solicitud para que el usuario revise el diff.
+    if (cambiados.length) this.alCompletarConCambios(t.id);
   }
 
   private async ejecutarValidacion(
@@ -781,6 +787,7 @@ export class Orquestador {
       error: f.error,
       archivosModificados: leerJson<string[]>(f.archivos, []),
       validaciones: leerJson<ResultadoValidacion[]>(f.validaciones, []),
+      publicacion: leerJson<PublicacionTarea | null>(f.publicacion, null),
       uso: { tokensEntrada: f.tokens_entrada, tokensSalida: f.tokens_salida, costoUsd: f.costo_usd },
       creadaEn: f.creada_en,
       iniciadaEn: f.iniciada_en,

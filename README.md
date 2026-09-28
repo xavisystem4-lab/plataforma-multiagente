@@ -14,8 +14,8 @@ así que el trabajo continúa aunque cierres la laptop.
 | F1 | Proyectos de GitHub, alta de agentes (multi-proveedor), bóveda de claves, auditoría visible | ✅ Completada |
 | F2 | Orquestador, sandbox Docker por proyecto, WebSocket en tiempo real, botón "Continuar proyecto" | ✅ Completada |
 | F3 | Colaboración multiagente: propuestas, revisión cruzada, coordinador, límites | ✅ Completada |
-| F4 | Diff, aprobación, reversión | Siguiente |
-| F5 | Instalador de Windows y APK de Android (Capacitor) | Pendiente |
+| F4 | Diff, aprobación, reversión | ✅ Completada |
+| F5 | Instalador de Windows y APK de Android (Capacitor) | Siguiente |
 | F6 | Despliegue remoto (VPS o PC propia) y endurecimiento | Pendiente |
 
 El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
@@ -105,6 +105,22 @@ rondas de revisión (0 a 3). El trabajo avanza por fases:
 
 Cada propuesta, revisión, decisión e integración queda en un registro que no se puede modificar, con el
 agente responsable. La tarea se puede pausar y reanudar en cualquier fase sin repetir lo ya hecho.
+
+## Uso (F4): revisar, aprobar y revertir
+
+Nada se publica en GitHub sin tu aprobación:
+
+1. Cuando una tarea termina con cambios, aparece en **Aprobaciones** (y en el panel) como pendiente.
+2. En el detalle de la tarea revisas el **diff** por archivo (líneas agregadas y eliminadas).
+3. **Aprobar y publicar** sube **solo la rama del agente** (`agentes/…`) y, si lo eliges, abre un **Pull Request**
+   hacia la rama base. La rama principal nunca se modifica desde la plataforma: la fusión la haces tú en GitHub.
+4. **Rechazar** evita la publicación; opcionalmente **descarta** la rama y los archivos de trabajo del servidor.
+5. **Revertir** una tarea publicada: si el PR no se fusionó, se cierra y se borra la rama remota; si ya se
+   fusionó, se abre un **PR de reversión** (`revertir/…`) para que lo revises.
+
+El token de GitHub necesita permiso de escritura (*Contents: Read and write*) y, para abrir PR,
+*Pull requests: Read and write*. Salvaguarda en el código: solo se pueden publicar o borrar ramas `agentes/*`
+y `revertir/*`, con refspec explícito y sin `--force`.
 
 ## Pruebas
 

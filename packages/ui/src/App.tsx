@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { BarraTitulo } from './components/BarraTitulo';
 import { Shell, type Pagina } from './components/Shell';
 import { ProveedorSesion, useSesion } from './lib/sesion';
-import { ProveedorTiempoReal } from './lib/tiempoReal';
+import { useDatos } from './lib/datos';
+import { ProveedorTiempoReal, useEventos } from './lib/tiempoReal';
+import { Aprobaciones } from './pages/Aprobaciones';
 import { Agentes } from './pages/Agentes';
 import { Auditoria } from './pages/Auditoria';
 import { Login } from './pages/Login';
@@ -32,17 +34,28 @@ function Contenido() {
 
   return (
     <ProveedorTiempoReal api={api}>
-      <Shell usuario={usuario} pagina={pagina} alNavegar={navegar} alSalir={() => void salir()}>
+      <ShellConContadores usuario={usuario} pagina={pagina} alNavegar={navegar} alSalir={() => void salir()}>
         {pagina === 'panel' && <Panel usuario={usuario} irA={navegar} abrirTarea={abrirTarea} />}
         {pagina === 'tareas' && <Tareas abierta={tareaAbierta} alAbrir={abrirTarea} />}
+        {pagina === 'aprobaciones' && <Aprobaciones abrirTarea={abrirTarea} />}
         {pagina === 'proyectos' && <Proyectos />}
         {pagina === 'agentes' && <Agentes irA={navegar} />}
         {pagina === 'modelos' && <Modelos />}
         {pagina === 'auditoria' && <Auditoria usuario={usuario} />}
         {pagina === 'seguridad' && <Seguridad />}
-      </Shell>
+      </ShellConContadores>
     </ProveedorTiempoReal>
   );
+}
+
+/** Navegación con contadores (aprobaciones y preguntas pendientes) actualizados en tiempo real. */
+function ShellConContadores(props: Omit<Parameters<typeof Shell>[0], 'contadores'> & { children: ReactNode }) {
+  const { api } = useSesion();
+  const { datos, recargar } = useDatos(useCallback(() => api.resumen(), [api]));
+  useEventos((e) => {
+    if (e.tipo.startsWith('approval.') || e.tipo.startsWith('task.')) void recargar();
+  });
+  return <Shell {...props} contadores={{ aprobaciones: datos?.aprobacionesPendientes ?? 0, tareas: datos?.tareasEsperando ?? 0 }} />;
 }
 
 export function App() {

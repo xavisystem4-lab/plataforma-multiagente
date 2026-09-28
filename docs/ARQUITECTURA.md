@@ -66,9 +66,8 @@ Planeado:
 | GET | `/api/tareas`, `/api/tareas/:id`, `/api/tareas/:id/eventos` · GET `/api/sistema` | ✅ |
 | POST | `/api/tareas/:id/pausar`, `/reanudar`, `/cancelar`, `/responder` | ✅ |
 | GET | `/api/tareas/:id/decisiones` (registro del equipo) | ✅ |
-| GET | `/api/tareas/:id/diff` | F4 |
-| POST | `/api/aprobaciones/:id/aprobar`, `/rechazar` | F4 |
-| POST | `/api/cambios/:id/revertir` | F4 |
+| GET | `/api/aprobaciones?estado=` · POST `/api/aprobaciones/:id/aprobar`, `/rechazar` | ✅ |
+| GET | `/api/tareas/:id/diff` · POST `/api/tareas/:id/revertir` | ✅ |
 | WS | `/api/ws` (autenticación en el primer mensaje, reenvío desde `desde`) | ✅ |
 
 Los tipos de evento de tiempo real están en `packages/shared/src/eventos.ts`.
@@ -104,6 +103,17 @@ Los tipos de evento de tiempo real están en `packages/shared/src/eventos.ts`.
   en la tarea, costo total (el del coordinador), tiempo total (el del coordinador) y presupuesto mensual.
 - Si una subtarea falla, las que dependen de ella no se ejecutan y la tarea informa cuáles. Las preguntas de
   una subtarea llegan al usuario con el nombre del agente y la respuesta vuelve a esa subtarea.
+
+## Implementación de F4 (revisión y publicación)
+
+- `servicios/revision.ts`: al completarse una tarea con cambios se crea una solicitud `publicar` pendiente
+  (tabla `aprobaciones`, una pendiente por tarea). Aprobar hace `git push` de la rama del agente con refspec
+  explícito y opcionalmente abre un PR por la API de GitHub; rechazar puede descartar ramas y worktrees locales.
+- Revertir: PR abierto → se cierra y se borra la rama remota; PR fusionado → rama `revertir/…` desde la base con
+  `git revert` (`-m 1` si es merge) y PR de reversión. La rama base nunca se modifica directamente.
+- Diff: `git diff -M origin/<base>...<rama>` con `--name-status -z`, `--numstat -z` y parche; recortado a
+  100 KB por archivo y 1 MB en total.
+- Los errores de Git se devuelven como 502 con el mensaje real (sin credenciales).
 
 ## Flujo de "Continuar proyecto" (F2–F4)
 

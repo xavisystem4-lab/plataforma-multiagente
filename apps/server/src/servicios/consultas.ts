@@ -70,8 +70,7 @@ export class ServicioConsultas {
       agentes: contar('SELECT COUNT(*) AS n FROM agentes WHERE usuario_id = ?'),
       agentesActivos: contar('SELECT COUNT(*) AS n FROM agentes WHERE usuario_id = ? AND activo = 1'),
       proveedores: contar('SELECT COUNT(*) AS n FROM proveedores WHERE usuario_id = ?'),
-      // Las aprobaciones llegan en la fase F4.
-      aprobacionesPendientes: 0,
+      aprobacionesPendientes: contar("SELECT COUNT(*) AS n FROM aprobaciones WHERE usuario_id = ? AND estado = 'pendiente'"),
       tareasActivas: contar("SELECT COUNT(*) AS n FROM tareas WHERE usuario_id = ? AND estado IN ('en_cola','ejecutando')"),
       tareasEsperando: contar("SELECT COUNT(*) AS n FROM tareas WHERE usuario_id = ? AND estado = 'esperando_usuario'"),
     };

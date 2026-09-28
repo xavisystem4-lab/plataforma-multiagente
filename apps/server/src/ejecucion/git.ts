@@ -25,6 +25,13 @@ const limpiar = (texto: string) =>
     .replace(/(https?:\/\/)[^@\s/]+@/g, '$1••••@')
     .slice(0, 2000);
 
+/** Solo se publican o borran ramas creadas por la plataforma; nunca la rama base u otras. */
+export function verificarRamaPublicable(rama: string): void {
+  if (!/^(agentes|revertir)\/[A-Za-z0-9._\-/]+$/.test(rama) || rama.includes('..')) {
+    throw new ErrorGit(`Operación no permitida sobre la rama "${rama}": solo ramas agentes/* o revertir/*.`);
+  }
+}
+
 /**
  * Operaciones Git del servidor. Garantías:
  * - El token de GitHub viaja por variables de entorno (GIT_CONFIG_*): no queda en la URL
@@ -95,6 +102,76 @@ export class EspaciosGit {
       if (!conflictos.length) throw err;
       return { ok: false, conflictos };
     }
+  }
+
+  /** Diff (con parches) entre la rama base remota y la rama de la tarea. */
+  async diff(proyectoId: string, ramaBase: string, rama: string): Promise<{ numstat: string; nameStatus: string; parche: string }> {
+    const cwd = this.dirRepo(proyectoId);
+    const rango = `origin/${ramaBase}...${rama}`;
+    const [numstat, nameStatus, parche] = await Promise.all([
+      this.git(['diff', '-M', '--numstat', '-z', rango], { cwd }),
+      this.git(['diff', '-M', '--name-status', '-z', rango], { cwd }),
+      this.git(['diff', '-M', '--no-color', '--no-ext-diff', rango], { cwd }),
+    ]);
+    return { numstat: numstat.stdout, nameStatus: nameStatus.stdout, parche: parche.stdout };
+  }
+
+  /** ¿Existe la rama local? */
+  async existeRama(proyectoId: string, rama: string): Promise<boolean> {
+    try {
+      await this.git(['rev-parse', '--verify', '--quiet', `refs/heads/${rama}`], { cwd: this.dirRepo(proyectoId) });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Sube una rama a GitHub. Salvaguardas: solo ramas de agentes o de reversión, refspec explícito
+   * (rama local → misma rama remota) y nunca --force: la rama base jamás se modifica desde aquí.
+   */
+  async publicar(proyectoId: string, rama: string, token: string): Promise<void> {
+    verificarRamaPublicable(rama);
+    await this.git(['push', '--quiet', 'origin', `refs/heads/${rama}:refs/heads/${rama}`], {
+      cwd: this.dirRepo(proyectoId),
+      token,
+      timeoutMs: 300_000,
+    });
+  }
+
+  /** Borra la rama remota (solo ramas de agentes o de reversión). */
+  async borrarRamaRemota(proyectoId: string, rama: string, token: string): Promise<void> {
+    verificarRamaPublicable(rama);
+    await this.git(['push', '--quiet', 'origin', '--delete', rama], { cwd: this.dirRepo(proyectoId), token, timeoutMs: 120_000 });
+  }
+
+  /** Elimina worktrees y ramas locales de una tarea (descartar cambios en el servidor). */
+  async descartar(proyectoId: string, dirs: string[], ramas: string[]): Promise<void> {
+    const cwd = this.dirRepo(proyectoId);
+    for (const dir of dirs) {
+      if (existsSync(dir)) await this.git(['worktree', 'remove', '--force', dir], { cwd }).catch(() => undefined);
+    }
+    await this.git(['worktree', 'prune'], { cwd }).catch(() => undefined);
+    for (const rama of ramas) {
+      verificarRamaPublicable(rama);
+      await this.git(['branch', '-D', rama], { cwd }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Prepara una rama de reversión desde la rama base remota y revierte `sha`
+   * (con -m 1 si es un commit de merge). Devuelve el nombre de la rama creada.
+   */
+  async prepararReversion(proyectoId: string, nombreDir: string, ramaNueva: string, ramaBase: string, sha: string): Promise<string> {
+    verificarRamaPublicable(ramaNueva);
+    const dir = this.dirTarea(proyectoId, nombreDir);
+    await this.git(['worktree', 'add', '--quiet', '-b', ramaNueva, dir, `origin/${ramaBase}`], { cwd: this.dirRepo(proyectoId) });
+    const padres = (await this.git(['rev-list', '--parents', '-n', '1', sha], { cwd: dir })).stdout.trim().split(' ').length - 1;
+    await this.git(
+      ['-c', 'user.name=Plataforma Multiagente', '-c', 'user.email=agentes@softgala.local', 'revert', '--no-edit', ...(padres > 1 ? ['-m', '1'] : []), sha],
+      { cwd: dir },
+    );
+    return ramaNueva;
   }
 
   /** Commit de todos los cambios del worktree. Devuelve el sha o null si no había cambios. */

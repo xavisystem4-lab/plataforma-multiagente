@@ -220,4 +220,29 @@ export const MIGRACIONES: { version: number; nombre: string; sql: string }[] = [
         BEGIN SELECT RAISE(ABORT, 'El registro de decisiones no se puede modificar'); END;
     `,
   },
+  {
+    version: 5,
+    nombre: 'revision_aprobaciones',
+    sql: `
+      -- Estado de publicación de la tarea (JSON: estado, rama, PR, reversión).
+      ALTER TABLE tareas ADD COLUMN publicacion TEXT;
+
+      CREATE TABLE aprobaciones (
+        id TEXT PRIMARY KEY,
+        usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        proyecto_id TEXT NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+        tarea_id TEXT NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+        tipo TEXT NOT NULL CHECK (tipo IN ('publicar')),
+        estado TEXT NOT NULL CHECK (estado IN ('pendiente','aprobada','rechazada')),
+        titulo TEXT NOT NULL,
+        descripcion TEXT NOT NULL,
+        comentario TEXT,
+        creada_en TEXT NOT NULL,
+        resuelta_en TEXT
+      );
+      CREATE INDEX idx_aprobaciones_usuario ON aprobaciones(usuario_id, estado);
+      -- Una sola solicitud pendiente por tarea.
+      CREATE UNIQUE INDEX idx_aprobaciones_pendiente ON aprobaciones(tarea_id) WHERE estado = 'pendiente';
+    `,
+  },
 ];

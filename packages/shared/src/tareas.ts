@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PublicacionTarea } from './revision';
 
 export const ESTADOS_TAREA = [
   'en_cola',
@@ -153,6 +154,8 @@ export interface TareaPublica {
   error: string | null;
   archivosModificados: string[];
   validaciones: ResultadoValidacion[];
+  /** Estado de revisión y publicación (null mientras la tarea no ha terminado con cambios). */
+  publicacion: PublicacionTarea | null;
   uso: UsoTarea;
   creadaEn: string;
   iniciadaEn: string | null;
