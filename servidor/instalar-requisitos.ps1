@@ -1,4 +1,4 @@
-# Instala los requisitos del SERVIDOR en Windows automáticamente con winget
+﻿# Instala los requisitos del SERVIDOR en Windows automáticamente con winget
 # (incluido en Windows 10/11): Node.js y Tailscale. Docker es opcional y se ofrece aparte
 # porque requiere WSL2 y reiniciar la PC.
 #

@@ -1,6 +1,6 @@
-# Publica el servidor local (127.0.0.1:4000) como HTTPS dentro de tu red privada Tailscale.
+﻿# Publica el servidor local (127.0.0.1:4000) como HTTPS dentro de tu red privada Tailscale.
 # Requiere: Tailscale instalado y con sesión iniciada, y MagicDNS + HTTPS activados en la
-# consola de administración de Tailscale (Settings → Keys/DNS → Enable HTTPS).
+# consola de administración de Tailscale (Settings -> Keys/DNS -> Enable HTTPS).
 #
 #   Publicar:   powershell -ExecutionPolicy Bypass -File servidor\publicar-tailscale.ps1
 #   Quitar:     powershell -ExecutionPolicy Bypass -File servidor\publicar-tailscale.ps1 -Quitar
@@ -30,7 +30,7 @@ if ($LASTEXITCODE -ne 0 -or $estado -match 'Logged out') {
 # Publica HTTPS (443) apuntando al servidor local. --bg lo deja corriendo en segundo plano.
 & $tsExe serve --bg --https=443 "http://127.0.0.1:$Puerto"
 if ($LASTEXITCODE -ne 0) {
-  throw 'No se pudo publicar. Verifica que "HTTPS Certificates" esté activado en la consola de Tailscale (admin console → DNS).'
+  throw 'No se pudo publicar. Verifica que "HTTPS Certificates" esté activado en la consola de Tailscale (admin console -> DNS).'
 }
 
 # Obtiene el nombre DNS de esta máquina en la tailnet (…​.ts.net).

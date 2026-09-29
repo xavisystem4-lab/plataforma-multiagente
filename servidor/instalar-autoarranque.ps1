@@ -1,4 +1,4 @@
-# Crea (o quita) un acceso directo en la carpeta de Inicio de Windows para que el servidor
+﻿# Crea (o quita) un acceso directo en la carpeta de Inicio de Windows para que el servidor
 # arranque solo al iniciar sesión en esta PC. No instala ningún servicio del sistema.
 #
 #   Instalar:   powershell -ExecutionPolicy Bypass -File servidor\instalar-autoarranque.ps1
