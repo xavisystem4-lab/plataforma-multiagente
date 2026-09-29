@@ -36,9 +36,14 @@ Después, en la app de **Tailscale**: inicia sesión con tu cuenta y, en la cons
 Abre **PowerShell** en la carpeta del proyecto y ejecuta, en orden:
 
 ```powershell
+# Permite ejecutar scripts (npm en Windows lo necesita). Responde "S" cuando pregunte:
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 npm install
 node servidor\preparar-servidor.mjs
 ```
+
+> Si `npm install` falla con «la ejecución de scripts está deshabilitada en este sistema», es que
+> faltó el `Set-ExecutionPolicy` de arriba: ejecútalo y repite `npm install`.
 
 `preparar-servidor.mjs` crea `.env.servidor` con secretos nuevos y muestra tu **MASTER_KEY**.
 **Guárdala** en un gestor de contraseñas: sin ella no se pueden restaurar los respaldos ni

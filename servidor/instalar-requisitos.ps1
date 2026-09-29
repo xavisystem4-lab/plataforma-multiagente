@@ -10,6 +10,12 @@ $ErrorActionPreference = 'Stop'
 
 function Tengo($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
+# Tailscale se instala en una ruta fija; a veces no está en el PATH de la sesión actual.
+function TengoTailscale {
+  if (Tengo tailscale) { return $true }
+  return (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")
+}
+
 Write-Host '== Instalación de requisitos del servidor (SoftGala) ==' -ForegroundColor Cyan
 
 # winget es la tienda de paquetes de Windows; viene en Windows 10 21H2+ y Windows 11.
@@ -20,20 +26,22 @@ if (-not (Tengo winget)) {
   exit 1
 }
 
-function Instalar($id, $nombre, $comando) {
-  if (Tengo $comando) {
+function Instalar($id, $nombre, $yaInstalado) {
+  if (& $yaInstalado) {
     Write-Host "[ok] $nombre ya está instalado." -ForegroundColor Green
     return
   }
   Write-Host "[..] Instalando $nombre..." -ForegroundColor Cyan
   winget install --id $id --exact --silent --accept-source-agreements --accept-package-agreements
-  if ($LASTEXITCODE -ne 0) { throw "No se pudo instalar $nombre (winget devolvió $LASTEXITCODE)." }
-  Write-Host "[ok] $nombre instalado." -ForegroundColor Green
+  # Vuelve a comprobar: si el paquete ya estaba por otra vía, winget puede devolver un código de error
+  # aunque la herramienta esté presente. Solo es un fallo si sigue sin aparecer.
+  if (& $yaInstalado) { Write-Host "[ok] $nombre instalado." -ForegroundColor Green; return }
+  throw "No se pudo instalar $nombre (winget devolvió $LASTEXITCODE). Instálalo a mano y repite."
 }
 
 # Node.js LTS (para correr el servidor) y Tailscale (red privada).
-Instalar 'OpenJS.NodeJS.LTS' 'Node.js LTS' 'node'
-Instalar 'tailscale.tailscale' 'Tailscale' 'tailscale'
+Instalar 'OpenJS.NodeJS.LTS' 'Node.js LTS' { Tengo node }
+Instalar 'Tailscale.Tailscale' 'Tailscale' { TengoTailscale }
 
 if ($ConDocker) {
   if (Tengo docker) {
