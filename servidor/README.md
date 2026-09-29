@@ -52,7 +52,7 @@ mudar el servidor de PC.
 Crea tu usuario (el primero es administrador):
 
 ```powershell
-npm run usuario:crear -- --email tu@correo.com --nombre "Tu Nombre"
+node servidor\usuario.mjs -- --email tu@correo.com --nombre "Tu Nombre"
 ```
 
 ## 3. Publicar con Tailscale y arrancar
@@ -96,8 +96,8 @@ Solo tus dispositivos dentro de la red Tailscale pueden llegar al servidor.
 - **Manual**:
 
   ```powershell
-  npm run respaldo:crear                 # en datos-servidor\respaldos\
-  npm run respaldo:crear -- --dir D:\copias   # en otra carpeta o disco externo
+  node servidorespaldo.mjs crear        # en datos-servidor\respaldos\
+  node servidor\respaldo.mjs crear -- --dir D:\copias   # en otra carpeta o disco externo
   ```
 
 Guarda de vez en cuando una copia **fuera de la PC** (disco externo o nube), junto con tu MASTER_KEY
@@ -113,7 +113,7 @@ Necesitas **dos cosas**: un archivo de respaldo `.db` y la **MASTER_KEY** con qu
 3. Detén el servidor si está corriendo y restaura el respaldo:
 
    ```powershell
-   npm run respaldo:restaurar -- --archivo D:\copias\multiagente-2026-09-28_1430.db
+   node servidor\respaldo.mjs restaurar -- --archivo D:\copias\multiagente-2026-09-28_1430.db
    ```
 
 4. Publica con Tailscale (paso 3) y arranca. La **dirección `.ts.net` cambia** (es otra PC): actualiza
