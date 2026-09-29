@@ -19,6 +19,17 @@ contextBridge.exposeInMainWorld('softgala', {
       return () => ipcRenderer.removeListener('sesion:cerrada', oyente);
     },
   },
+  actualizaciones: {
+    estado: () => ipcRenderer.invoke('actualizacion:estado'),
+    buscar: () => ipcRenderer.invoke('actualizacion:buscar'),
+    descargar: () => ipcRenderer.invoke('actualizacion:descargar'),
+    instalar: () => ipcRenderer.invoke('actualizacion:instalar'),
+    alCambiar: (fn) => {
+      const oyente = (_e, estado) => fn(estado);
+      ipcRenderer.on('actualizacion:estado', oyente);
+      return () => ipcRenderer.removeListener('actualizacion:estado', oyente);
+    },
+  },
   ventanas: {
     abrirProyecto: (proyectoId, titulo, color) => ipcRenderer.invoke('ventana:abrir-proyecto', proyectoId, titulo, color),
     configurar: (opciones) => ipcRenderer.invoke('ventana:configurar', opciones),

@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain, Menu, net, protocol, safeStorage, session, 
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { registrarActualizador } = require('./actualizador.cjs');
 
 const URL_DESARROLLO = process.env.ELECTRON_DEV_URL || null;
 const DIR_UI = app.isPackaged
@@ -170,6 +171,9 @@ ipcMain.handle('sesion:limpiar', (e) => {
   borrarSecreto('refreshToken');
   avisarATodas('sesion:cerrada');
 });
+
+// ---------- Actualizaciones (solo app empaquetada, no en modo captura) ----------
+registrarActualizador({ validarRemitente, habilitado: app.isPackaged && !CAPTURA });
 
 // ---------- Ventanas ----------
 const ventanasProyecto = new Map(); // proyectoId → BrowserWindow

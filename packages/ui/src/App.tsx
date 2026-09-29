@@ -1,6 +1,7 @@
 import { App as AppNativa } from '@capacitor/app';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { BarraTitulo } from './components/BarraTitulo';
+import { BarraEstado } from './components/BarraEstado';
 import { Shell, type Pagina } from './components/Shell';
 import { ProveedorSesion, useSesion } from './lib/sesion';
 import { useDatos } from './lib/datos';
@@ -137,6 +138,7 @@ export function App() {
         <div className="ventana">
           <BarraTitulo />
           <Contenido />
+          <BarraEstado />
         </div>
       </ProveedorSesion>
     </ProveedorTema>

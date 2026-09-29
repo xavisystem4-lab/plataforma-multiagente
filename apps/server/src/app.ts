@@ -148,7 +148,7 @@ export async function construirApp(dep: Dependencias): Promise<FastifyInstance> 
   app.decorate('orquestador', orquestador);
   app.addHook('onClose', async () => orquestador.detener());
 
-  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.7.0' }));
+  app.get('/api/salud', async () => ({ estado: 'ok', version: '0.8.0' }));
   rutasAuth(app, auth, autenticar);
   rutasRecursos(app, servicios, autenticar, (proyectoId) => orquestador.limpiarProyecto(proyectoId));
   rutasTareas(app, orquestador, autenticar);

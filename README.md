@@ -19,6 +19,7 @@ así que el trabajo continúa aunque cierres la laptop.
 | F5+ | Ventanas de proyecto: fijados, renombrar, color y barra de avance | ✅ Completada |
 | F6 | Instrucciones por voz (transcripción con OpenAI) | ✅ Completada |
 | F7 | Servidor 24/7 en PC propia (Windows) publicado con Tailscale, respaldos y restauración | ✅ Completada |
+| F8 | Actualización automática de la app (Windows) desde GitHub Releases | ✅ Completada |
 
 El diseño completo está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
@@ -214,6 +215,27 @@ En la app (Windows y Android), en **Servidor**, pon la dirección `https://<tu-p
 
 **Respaldos**: automáticos cada 24 h en `datos-servidor/respaldos/`; manual con `npm run respaldo:crear`.
 **Mudarte de PC**: con un respaldo `.db` + tu MASTER_KEY, la PC nueva queda idéntica (ver la guía).
+
+## Actualización automática (F8)
+
+La app de Windows muestra abajo a la izquierda su **versión** y abajo a la derecha un botón
+**Actualizar**. Al pulsarlo busca una versión nueva en **GitHub Releases**, la descarga con una
+**barra de progreso** y, al terminar, ofrece **reiniciar e instalar**. Nada se instala sin que lo
+pulses. En Android y web solo se muestra la versión.
+
+Para que funcione, las versiones se publican en el repositorio configurado en
+`apps/desktop/package.json` (`build.publish`). Publicar una versión nueva:
+
+```powershell
+# 1) Sube la versión en los package.json (y versionName/versionCode de Android).
+# 2) Compila y publica en GitHub Releases (crea el tag y sube el instalador + latest.yml):
+setx GH_TOKEN "<token de GitHub con permiso repo>"   # una vez; abre otra terminal después
+npm run build -w packages/ui
+npx electron-builder -c apps/desktop/package.json --win nsis --publish always
+```
+
+La app compara su versión con la última publicada; si hay una mayor, aparece **Actualizar**.
+El repositorio de releases debe ser accesible por la app (público, o privado con token).
 
 ## Pruebas
 

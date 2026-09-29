@@ -12,14 +12,24 @@ los agentes, se guardan los proyectos y las claves cifradas. Esta guía lo insta
 
 ## 1. Requisitos en la PC servidor
 
-1. **Node.js 22 o superior** (LTS): https://nodejs.org — instálalo y reinicia la terminal.
-2. **Tailscale**: https://tailscale.com/download — instálalo e inicia sesión con tu cuenta.
-   En la consola de Tailscale (admin), activa **MagicDNS** y **HTTPS Certificates**
-   (Settings → DNS → *Enable HTTPS*).
-3. (Opcional) **Docker Desktop**: solo si quieres que se ejecuten las validaciones (tests, lint,
-   build) de los proyectos. Sin Docker, esas validaciones se informan como «no ejecutadas».
+Primero copia el proyecto a la PC servidor (clónalo desde GitHub o copia la carpeta completa, por
+ejemplo en `C:\Multiagente`). Luego, en **PowerShell** dentro de esa carpeta:
 
-Copia esta carpeta del proyecto completo a la PC servidor (por ejemplo en `C:\Multiagente`).
+```powershell
+# Instala Node.js y Tailscale automáticamente (con winget, ya incluido en Windows 10/11):
+powershell -ExecutionPolicy Bypass -File servidor\instalar-requisitos.ps1
+# ...o, si además quieres Docker (para las validaciones; requiere reiniciar):
+powershell -ExecutionPolicy Bypass -File servidor\instalar-requisitos.ps1 -ConDocker
+```
+
+Cierra y vuelve a abrir PowerShell al terminar (para que el sistema reconozca `node` y `tailscale`).
+
+Después, en la app de **Tailscale**: inicia sesión con tu cuenta y, en la consola de administración
+(admin console → DNS), activa **MagicDNS** y **HTTPS Certificates**.
+
+> Instalación manual (alternativa): **Node.js 22+** desde https://nodejs.org, **Tailscale** desde
+> https://tailscale.com/download, y **Docker Desktop** (opcional) desde https://docker.com.
+> Sin Docker, las validaciones (tests) de los proyectos se informan como «no ejecutadas».
 
 ## 2. Instalar y configurar (una sola vez)
 

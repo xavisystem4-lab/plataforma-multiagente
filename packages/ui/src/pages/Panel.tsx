@@ -14,8 +14,10 @@ const FASES: { id: string; nombre: string; estado: 'lista' | 'actual' | 'pendien
   { id: 'F2', nombre: 'Orquestador, sandbox y progreso en tiempo real', estado: 'lista' },
   { id: 'F3', nombre: 'Colaboración multiagente con coordinador', estado: 'lista' },
   { id: 'F4', nombre: 'Revisión de cambios, aprobación y reversión', estado: 'lista' },
-  { id: 'F5', nombre: 'Instalador de Windows y APK de Android', estado: 'actual' },
-  { id: 'F6', nombre: 'Despliegue remoto y endurecimiento', estado: 'pendiente' },
+  { id: 'F5', nombre: 'Instalador de Windows, APK de Android y tema claro/oscuro', estado: 'lista' },
+  { id: 'F6', nombre: 'Instrucciones por voz', estado: 'lista' },
+  { id: 'F7', nombre: 'Servidor 24/7 en PC propia con Tailscale y respaldos', estado: 'lista' },
+  { id: 'F8', nombre: 'Actualización automática de la app', estado: 'actual' },
 ];
 
 const ETIQUETA_FASE = {

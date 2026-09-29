@@ -1,0 +1,97 @@
+/* ---------- Barra de estado inferior (versión + actualización) ---------- */
+.barra-estado {
+  flex-shrink: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+  font-size: 12px;
+  color: var(--texto-suave);
+  user-select: none;
+}
+.be-version {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.be-version strong {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+.be-marca {
+  color: var(--gris-400);
+}
+.be-derecha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.be-texto {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.be-exito {
+  color: var(--exito, #1f7a4d);
+}
+.be-error {
+  color: var(--peligro, #b42318);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.be-boton {
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.be-boton:hover {
+  border-color: var(--marino-500);
+}
+.be-primario {
+  background: var(--marino-600);
+  border-color: var(--marino-600);
+  color: #fff;
+}
+.be-primario:hover {
+  background: var(--marino-700, #0e2a5c);
+}
+.be-progreso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.be-progreso-pista {
+  width: 160px;
+  max-width: 34vw;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--gris-100);
+  overflow: hidden;
+}
+.be-progreso-relleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--marino-600);
+  transition: width 0.25s ease;
+}
+
+@media (max-width: 640px) {
+  .be-marca {
+    display: none;
+  }
+  .be-progreso-pista {
+    width: 90px;
+  }
+}

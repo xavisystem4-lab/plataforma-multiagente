@@ -14,7 +14,31 @@ interface PuenteEscritorio {
     abrirProyecto(proyectoId: string, titulo: string, color: string): Promise<void>;
     configurar(o: { titulo?: string; color?: string; encima?: boolean }): Promise<{ encima: boolean } | null>;
   };
+  actualizaciones: IntermediarioActualizaciones;
 }
+
+/** Fases de la actualización automática (ver apps/desktop/actualizador.cjs). */
+export type FaseActualizacion = 'inactivo' | 'buscando' | 'disponible' | 'descargando' | 'lista' | 'al-dia' | 'error';
+
+export interface EstadoActualizacion {
+  fase: FaseActualizacion;
+  version: string;
+  disponible: string | null;
+  porcentaje: number;
+  mensaje: string | null;
+  soportado?: boolean;
+}
+
+export interface IntermediarioActualizaciones {
+  estado(): Promise<EstadoActualizacion>;
+  buscar(): Promise<{ soportado: boolean }>;
+  descargar(): Promise<void>;
+  instalar(): Promise<void>;
+  alCambiar(fn: (estado: EstadoActualizacion) => void): () => void;
+}
+
+/** Actualizaciones: solo en la app de escritorio empaquetada. */
+export const actualizacionesEscritorio = () => window.softgala?.actualizaciones ?? null;
 
 export interface IntermediarioSesion {
   establecer(refreshToken: string, accessToken: string, expiraEn: number): Promise<void>;
