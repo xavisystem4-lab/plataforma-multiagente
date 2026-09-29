@@ -44,7 +44,8 @@
       {
         "provider": "github",
         "owner": "xavisystem4-lab",
-        "repo": "plataforma-multiagente"
+        "repo": "plataforma-multiagente",
+        "releaseType": "release"
       }
     ],
     "win": {
